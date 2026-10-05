@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>极简记账 · 1:1 交互体验版</title>
+    <style>
+        :root {
+            --bg-color: #000000;
+            --surface-color: #121418;
+            --card-color: #1a1e26;
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --border-color: #262b35;
+            --coral-red: #ff5c5c;
+            --mint-green: #10b981;
+            --tech-blue: #0ea5e9;
+            --active-theme: var(--coral-red);
+        }
+
+        .light-mode {
+            --bg-color: #f8fafc;
+            --surface-color: #ffffff;
+            --card-color: #f1f5f9;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: #0f1115;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .phone-frame {
+            width: 100%;
+            max-width: 414px;
+            height: 896px;
+            background-color: var(--bg-color);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            border-radius: 36px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+            border: 8px solid #2d3342;
+        }
+
+        /* 顶部导航 */
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px 8px;
+            color: var(--text-primary);
+        }
+        .icon-btn {
+            font-size: 20px;
+            cursor: pointer;
+            padding: 6px;
+        }
+        .tabs {
+            display: flex;
+            gap: 24px;
+        }
+        .tab-item {
+            font-size: 18px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            position: relative;
+            padding-bottom: 4px;
+        }
+        .tab-item.active {
+            color: var(--text-primary);
+            font-weight: bold;
+        }
+        .tab-item.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 24px;
+            height: 3px;
+            border-radius: 2px;
+            background-color: var(--active-theme);
+        }
+
+        /* 账本胶囊 */
+        .book-pill {
+            align-self: flex-start;
+            margin-left: 20px;
+            margin-top: 4px;
+            background-color: var(--card-color);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* 主内容区域 */
+        .content-area {
+            flex: 1;
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 分类网格 */
+        .category-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        .category-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+        .cat-icon {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 22px;
+            background: transparent;
+            color: var(--text-primary);
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .category-item.active .cat-icon {
+            border-color: var(--active-theme);
+            background: rgba(255, 92, 92, 0.15);
+            color: var(--active-theme);
+        }
+        .cat-name {
+            font-size: 13px;
+            color: var(--text-primary);
+        }
+
+        /* 转账卡片 */
+        .transfer-card {
+            background-color: var(--card-color);
+            border-radius: 16px;
+            padding: 16px;
+            position: relative;
+            margin-top: 20px;
+        }
+        .acc-row {
+            padding: 12px 0;
+            font-size: 16px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .acc-divider {
+            height: 1px;
+            background: var(--border-color);
+        }
+        .swap-btn {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: var(--tech-blue);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(14,165,233,0.3);
+        }
+
+        /* 底部记账面板 */
+        .bottom-panel {
+            background-color: var(--surface-color);
+            border-radius: 24px 24px 0 0;
+            padding: 16px 12px 24px;
+            border-top: 1px solid var(--border-color);
+        }
+        .input-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 12px 12px;
+        }
+        .remark-input {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 15px;
+            outline: none;
+            width: 140px;
+        }
+        .amount-display {
+            font-size: 38px;
+            font-weight: bold;
+            color: var(--active-theme);
+        }
+        .pills-row {
+            display: flex;
+            gap: 8px;
+            padding: 0 12px 14px;
+            overflow-x: auto;
+        }
+        .pill {
+            background: var(--card-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 12px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        /* 自定义计算器键盘 */
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+        .key {
+            height: 56px;
+            background-color: var(--card-color);
+            color: var(--text-primary);
+            font-size: 22px;
+            font-weight: 500;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: opacity 0.1s;
+        }
+        .key:active {
+            opacity: 0.7;
+        }
+        .key.save {
+            background-color: var(--active-theme);
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .key.next {
+            font-size: 16px;
+            color: var(--text-secondary);
+        }
+
+        /* 账本视图模态 */
+        .modal-view {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-color);
+            z-index: 100;
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            padding: 16px 20px;
+        }
+        .modal-view.open {
+            transform: translateX(0);
+        }
+        .book-card-item {
+            height: 120px;
+            border-radius: 18px;
+            margin-bottom: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            cursor: pointer;
+            position: relative;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+
+<div class="phone-frame" id="app">
+    <!-- 顶部状态栏与导航 -->
+    <div class="top-bar">
+        <div class="icon-btn" onclick="toggleTheme()">🌓</div>
+        <div class="tabs">
+            <div class="tab-item active" id="tabExpense" onclick="switchTab('EXPENSE')">支出</div>
+            <div class="tab-item" id="tabIncome" onclick="switchTab('INCOME')">收入</div>
+            <div class="tab-item" id="tabTransfer" onclick="switchTab('TRANSFER')">转账</div>
+        </div>
+        <div class="icon-btn" onclick="openBooksView()">📚</div>
+    </div>
+
+    <div class="book-pill" onclick="openBooksView()">
+        <span id="curBookName">日常消费账本</span> ▾
+    </div>
+
+    <!-- 中间分类内容 -->
+    <div class="content-area" id="contentArea">
+        <!-- 动态注入分类或转账 -->
+    </div>
+
+    <!-- 底部输入与计算器键盘 -->
+    <div class="bottom-panel">
+        <div class="input-row">
+            <input type="text" class="remark-input" placeholder="点此输入备注..." id="remarkInput">
+            <div class="amount-display" id="amountDisplay">0.0</div>
+        </div>
+        <div class="pills-row">
+            <div class="pill">账户</div>
+            <div class="pill">今天 22:45</div>
+            <div class="pill">图片</div>
+            <div class="pill" id="extraPill">标签</div>
+        </div>
+        <div class="keypad">
+            <div class="key" onclick="pressKey('1')">1</div>
+            <div class="key" onclick="pressKey('2')">2</div>
+            <div class="key" onclick="pressKey('3')">3</div>
+            <div class="key" onclick="backspace()">⌫</div>
+            <div class="key" onclick="pressKey('4')">4</div>
+            <div class="key" onclick="pressKey('5')">5</div>
+            <div class="key" onclick="pressKey('6')">6</div>
+            <div class="key" onclick="pressOperator('+')">+</div>
+            <div class="key" onclick="pressKey('7')">7</div>
+            <div class="key" onclick="pressKey('8')">8</div>
+            <div class="key" onclick="pressKey('9')">9</div>
+            <div class="key" onclick="pressOperator('-')">−</div>
+            <div class="key next" onclick="saveRecord(true)">再记</div>
+            <div class="key" onclick="pressKey('0')">0</div>
+            <div class="key" onclick="pressDot()">.</div>
+            <div class="key save" onclick="saveRecord(false)">保存</div>
+        </div>
+    </div>
+
+    <!-- 账本管理列表抽屉页面 -->
+    <div class="modal-view" id="booksModal">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <div class="icon-btn" onclick="closeBooksView()">← 返回</div>
+            <h2 style="font-size:18px; color:var(--text-primary)">我的账本</h2>
+            <div class="icon-btn" onclick="addNewBook()">+ 新建</div>
+        </div>
+        <div id="booksList" style="flex:1; overflow-y:auto;">
+            <!-- 动态卡片 -->
+        </div>
+    </div>
+</div>
+
+<script>
+    let curType = 'EXPENSE';
+    let curAmount = '0.0';
+    let curBook = '日常消费账本';
+    let isLight = false;
+
+    const books = [
+        { name: '日常消费账本', sub: '默认主账本', bg: 'linear-gradient(135deg, #8E3E28, #D67347)' },
+        { name: '境内投资账本', sub: 'A股 · 基金 · 固收', bg: 'linear-gradient(135deg, #0F3B66, #2278C9)' },
+        { name: '境外投资账本', sub: '美港股 · 多币种', bg: 'linear-gradient(135deg, #1E2640, #4C5D8A)' },
+        { name: '长期储蓄账本', sub: '定期 · 存单 · 国债', bg: 'linear-gradient(135deg, #6B4E1B, #B88E3E)' }
+    ];
+
+    function renderContent() {
+        const root = document.getElementById('contentArea');
+        if (curType === 'EXPENSE') {
+            root.innerHTML = `
+                <div class="category-row">
+                    <div class="category-item" onclick="selectCat(this)"><div class="cat-icon">👕</div><div class="cat-name">衣</div></div>
+                    <div class="category-item active" onclick="selectCat(this)"><div class="cat-icon">🍲</div><div class="cat-name">食</div></div>
+                    <div class="category-item" onclick="selectCat(this)"><div class="cat-icon">🏠</div><div class="cat-name">住</div></div>
+                    <div class="category-item" onclick="selectCat(this)"><div class="cat-icon">🚗</div><div class="cat-name">行</div></div>
+                    <div class="category-item" onclick="selectCat(this)"><div class="cat-icon">⋯</div><div class="cat-name">其他</div></div>
+                </div>
+            `;
+            document.getElementById('extraPill').innerText = '标签';
+        } else if (curType === 'INCOME') {
+            root.innerHTML = `
+                <div class="category-row">
+                    <div class="category-item active" onclick="selectCat(this)"><div class="cat-icon">💼</div><div class="cat-name">工资</div></div>
+                    <div class="category-item" onclick="selectCat(this)"><div class="cat-icon">🍚</div><div class="cat-name">生活费</div></div>
+                    <div class="category-item" onclick="selectCat(this)"><div class="cat-icon">🧧</div><div class="cat-name">收红包</div></div>
+                    <div class="category-item" onclick="selectCat(this)"><div class="cat-icon">💰</div><div class="cat-name">外快</div></div>
+                </div>
+                <div class="category-row" style="margin-top:20px; justify-content: flex-start; gap: 24px;">
+                    <div class="category-item" onclick="selectCat(this)"><div class="cat-icon">📈</div><div class="cat-name">股票基金</div></div>
+                    <div class="category-item" onclick="selectCat(this)"><div class="cat-icon">⋯</div><div class="cat-name">其它</div></div>
+                </div>
+            `;
+            document.getElementById('extraPill').innerText = '标签';
+        } else {
+            root.innerHTML = `
+                <div class="transfer-card">
+                    <div class="acc-row">💳 <span id="accFrom">转出账户: 招商银行卡</span></div>
+                    <div class="acc-divider"></div>
+                    <div class="acc-row">👛 <span id="accTo">转入账户: 微信零钱通</span></div>
+                    <div class="swap-btn" onclick="swapAcc()">⇄</div>
+                </div>
+            `;
+            document.getElementById('extraPill').innerText = '手续费';
+        }
+    }
+
+    function switchTab(type) {
+        curType = type;
+        document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+        if (type === 'EXPENSE') {
+            document.getElementById('tabExpense').classList.add('active');
+            document.documentElement.style.setProperty('--active-theme', 'var(--coral-red)');
+        } else if (type === 'INCOME') {
+            document.getElementById('tabIncome').classList.add('active');
+            document.documentElement.style.setProperty('--active-theme', 'var(--mint-green)');
+        } else {
+            document.getElementById('tabTransfer').classList.add('active');
+            document.documentElement.style.setProperty('--active-theme', 'var(--tech-blue)');
+        }
+        renderContent();
+    }
+
+    function pressKey(num) {
+        if (curAmount === '0.0' || curAmount === '0') curAmount = num;
+        else curAmount += num;
+        document.getElementById('amountDisplay').innerText = curAmount;
+    }
+
+    function pressDot() {
+        if (!curAmount.endsWith('.') && !curAmount.split(/[+-]/).pop().includes('.')) {
+            curAmount += '.';
+            document.getElementById('amountDisplay').innerText = curAmount;
+        }
+    }
+
+    function pressOperator(op) {
+        if (!curAmount.endsWith('+') && !curAmount.endsWith('-')) {
+            curAmount += op;
+            document.getElementById('amountDisplay').innerText = curAmount;
+        }
+    }
+
+    function backspace() {
+        if (curAmount.length > 1) curAmount = curAmount.slice(0, -1);
+        else curAmount = '0.0';
+        document.getElementById('amountDisplay').innerText = curAmount;
+    }
+
+    function saveRecord(isAgain) {
+        alert(`已成功记账: ¥${curAmount} (写入本地数据库)`);
+        curAmount = '0.0';
+        document.getElementById('amountDisplay').innerText = curAmount;
+        document.getElementById('remarkInput').value = '';
+    }
+
+    function selectCat(el) {
+        document.querySelectorAll('.category-item').forEach(e => e.classList.remove('active'));
+        el.classList.add('active');
+    }
+
+    function swapAcc() {
+        const from = document.getElementById('accFrom');
+        const to = document.getElementById('accTo');
+        const tmp = from.innerText;
+        from.innerText = to.innerText.replace('转入', '转出');
+        to.innerText = tmp.replace('转出', '转入');
+    }
+
+    function toggleTheme() {
+        isLight = !isLight;
+        document.querySelector('.phone-frame').classList.toggle('light-mode', isLight);
+    }
+
+    function openBooksView() {
+        const list = document.getElementById('booksList');
+        list.innerHTML = books.map((b, i) => `
+            <div class="book-card-item" style="background:${b.bg}" onclick="selectBook('${b.name}')">
+                <h3 style="font-size:20px; font-weight:bold;">${b.name}</h3>
+                <p style="font-size:12px; opacity:0.8; margin-top:4px;">${b.sub}</p>
+                ${b.name === curBook ? '<span style="position:absolute; top:12px; right:12px; background:white; color:black; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px;">✓</span>' : ''}
+            </div>
+        `).join('');
+        document.getElementById('booksModal').classList.add('open');
+    }
+
+    function closeBooksView() {
+        document.getElementById('booksModal').classList.remove('open');
+    }
+
+    function selectBook(name) {
+        curBook = name;
+        document.getElementById('curBookName').innerText = name;
+        closeBooksView();
+    }
+
+    function addNewBook() {
+        const name = prompt('请输入新账本名称:');
+        if (name) {
+            books.push({ name: name, sub: '自定义专属账本', bg: 'linear-gradient(135deg, #2b3a4a, #495867)' });
+            openBooksView();
+        }
+    }
+
+    // 初始化加载
+    renderContent();
+</script>
+</body>
+</html>
