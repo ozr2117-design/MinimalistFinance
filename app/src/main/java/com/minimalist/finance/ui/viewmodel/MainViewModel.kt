@@ -46,6 +46,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var feeText = MutableStateFlow("0.0")
     var discountText = MutableStateFlow("0.0")
 
+    val allRecords = recordDao.getAllRecords().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    fun deleteRecord(record: Record) {
+        viewModelScope.launch {
+            recordDao.deleteRecord(record)
+        }
+    }
+
     init {
         viewModelScope.launch {
             allBooks.collect { books ->

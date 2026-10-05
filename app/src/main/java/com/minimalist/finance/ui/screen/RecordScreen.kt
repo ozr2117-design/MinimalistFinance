@@ -69,9 +69,9 @@ fun RecordScreen(
                         Icon(imageVector = Icons.Default.Menu, contentDescription = "菜单", tint = textColor)
                     }
 
-                    // 顶部三 Tab (支出 / 收入 / 转账)
+                    // 顶部双 Tab (支出 / 收入)
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(36.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         TabHeaderItem(
@@ -85,12 +85,6 @@ fun RecordScreen(
                             isSelected = currentType == TransactionType.INCOME,
                             color = MintGreen,
                             onClick = { viewModel.currentTransactionType.value = TransactionType.INCOME }
-                        )
-                        TabHeaderItem(
-                            title = "转账",
-                            isSelected = currentType == TransactionType.TRANSFER,
-                            color = TechBlue,
-                            onClick = { viewModel.currentTransactionType.value = TransactionType.TRANSFER }
                         )
                     }
 
@@ -124,26 +118,19 @@ fun RecordScreen(
                 .padding(innerPadding),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // 中间区域：分类展示 或 转账账户选择
+            // 中间区域：分类展示
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                when (currentType) {
-                    TransactionType.EXPENSE -> {
-                        // 支出精简五大分类：衣、食、住、行、其他
-                        ExpenseCategoryRow(viewModel = viewModel, isDark = isDark)
-                    }
-                    TransactionType.INCOME -> {
-                        // 收入六大经典分类：工资、生活费、收红包、外快、股票基金、其它
-                        IncomeCategoryRow(viewModel = viewModel, isDark = isDark)
-                    }
-                    TransactionType.TRANSFER -> {
-                        // 转账双卡片：转出 ⇄ 转入
-                        TransferAccountSection(viewModel = viewModel, isDark = isDark)
-                    }
+                if (currentType == TransactionType.EXPENSE) {
+                    // 支出精简五大分类：衣、食、住、行、其他
+                    ExpenseCategoryRow(viewModel = viewModel, isDark = isDark)
+                } else {
+                    // 收入六大经典分类：工资、生活费、收红包、外快、股票基金、其它
+                    IncomeCategoryRow(viewModel = viewModel, isDark = isDark)
                 }
             }
 
@@ -191,14 +178,9 @@ fun RecordScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     PillTag(label = "账户", isDark = isDark)
-                    PillTag(label = "今天 22:45", isDark = isDark)
+                    PillTag(label = "今天 23:30", isDark = isDark)
                     PillTag(label = "图片", isDark = isDark)
-                    if (currentType == TransactionType.TRANSFER) {
-                        PillTag(label = "手续费", isDark = isDark)
-                        PillTag(label = "优惠", isDark = isDark)
-                    } else {
-                        PillTag(label = "标签", isDark = isDark)
-                    }
+                    PillTag(label = "标签", isDark = isDark)
                 }
 
                 // 自定义计算器键盘

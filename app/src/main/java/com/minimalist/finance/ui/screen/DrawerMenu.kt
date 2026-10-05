@@ -24,6 +24,12 @@ import com.minimalist.finance.ui.viewmodel.MainViewModel
 fun DrawerMenu(
     viewModel: MainViewModel,
     onNavigateToBooks: () -> Unit,
+    onNavigateToDashboard: () -> Unit,
+    onNavigateToSearch: () -> Unit,
+    onNavigateToPeriodic: () -> Unit,
+    onNavigateToSaving: () -> Unit,
+    onNavigateToBackup: () -> Unit,
+    onNavigateToAbout: () -> Unit,
     onCloseDrawer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -103,7 +109,10 @@ fun DrawerMenu(
                 title = "资产大盘",
                 textColor = textColor,
                 textSecondary = textSecondary,
-                onClick = { onCloseDrawer() }
+                onClick = {
+                    onCloseDrawer()
+                    onNavigateToDashboard()
+                }
             )
 
             DrawerMenuItem(
@@ -111,7 +120,10 @@ fun DrawerMenu(
                 title = "搜索账单",
                 textColor = textColor,
                 textSecondary = textSecondary,
-                onClick = { onCloseDrawer() }
+                onClick = {
+                    onCloseDrawer()
+                    onNavigateToSearch()
+                }
             )
 
             DrawerMenuItem(
@@ -119,7 +131,10 @@ fun DrawerMenu(
                 title = "周期 · 分期",
                 textColor = textColor,
                 textSecondary = textSecondary,
-                onClick = { onCloseDrawer() }
+                onClick = {
+                    onCloseDrawer()
+                    onNavigateToPeriodic()
+                }
             )
 
             DrawerMenuItem(
@@ -127,7 +142,10 @@ fun DrawerMenu(
                 title = "存钱计划",
                 textColor = textColor,
                 textSecondary = textSecondary,
-                onClick = { onCloseDrawer() }
+                onClick = {
+                    onCloseDrawer()
+                    onNavigateToSaving()
+                }
             )
 
             DrawerMenuItem(
@@ -135,7 +153,10 @@ fun DrawerMenu(
                 title = "数据备份导出",
                 textColor = textColor,
                 textSecondary = textSecondary,
-                onClick = { onCloseDrawer() }
+                onClick = {
+                    onCloseDrawer()
+                    onNavigateToBackup()
+                }
             )
 
             DrawerMenuItem(
@@ -156,13 +177,17 @@ fun DrawerMenu(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onCloseDrawer() }
+                .clickable {
+                    onCloseDrawer()
+                    onNavigateToAbout()
+                }
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(imageVector = Icons.Default.Settings, contentDescription = "设置", tint = textSecondary)
             Spacer(modifier = Modifier.width(16.dp))
             Text(text = "设置 · 关于", fontSize = 15.sp, color = textSecondary)
+        }
         }
     }
 

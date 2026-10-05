@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>极简记账 · 1:1 交互体验版</title>
+    <title>极简记账 · 正式版 1:1 交互全景</title>
     <style>
         :root {
             --bg-color: #000000;
@@ -37,7 +37,7 @@
         }
 
         body {
-            background-color: #0f1115;
+            background-color: #0b0d11;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -53,17 +53,17 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            border-radius: 36px;
-            box-shadow: 0 25px 60px rgba(0,0,0,0.5);
-            border: 8px solid #2d3342;
+            border-radius: 40px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+            border: 8px solid #242933;
         }
 
-        /* 顶部导航 (增加安全避让空间) */
+        /* 顶部导航 (安全区下移) */
         .top-bar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 38px 20px 10px;
+            padding: 42px 20px 10px;
             color: var(--text-primary);
         }
         .icon-btn {
@@ -73,10 +73,10 @@
         }
         .tabs {
             display: flex;
-            gap: 24px;
+            gap: 36px;
         }
         .tab-item {
-            font-size: 18px;
+            font-size: 20px;
             font-weight: 500;
             color: var(--text-secondary);
             cursor: pointer;
@@ -93,7 +93,7 @@
             bottom: 0;
             left: 50%;
             transform: translateX(-50%);
-            width: 24px;
+            width: 28px;
             height: 3px;
             border-radius: 2px;
             background-color: var(--active-theme);
@@ -105,7 +105,7 @@
             margin-left: 20px;
             margin-top: 4px;
             background-color: var(--card-color);
-            padding: 4px 10px;
+            padding: 4px 12px;
             border-radius: 12px;
             font-size: 12px;
             color: var(--text-secondary);
@@ -143,7 +143,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 22px;
+            font-size: 24px;
             background: transparent;
             color: var(--text-primary);
             border: 2px solid transparent;
@@ -159,48 +159,11 @@
             color: var(--text-primary);
         }
 
-        /* 转账卡片 */
-        .transfer-card {
-            background-color: var(--card-color);
-            border-radius: 16px;
-            padding: 16px;
-            position: relative;
-            margin-top: 20px;
-        }
-        .acc-row {
-            padding: 12px 0;
-            font-size: 16px;
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .acc-divider {
-            height: 1px;
-            background: var(--border-color);
-        }
-        .swap-btn {
-            position: absolute;
-            right: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            background: var(--tech-blue);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 4px 10px rgba(14,165,233,0.3);
-        }
-
         /* 底部记账面板 */
         .bottom-panel {
             background-color: var(--surface-color);
             border-radius: 24px 24px 0 0;
-            padding: 16px 12px 24px;
+            padding: 16px 12px 28px;
             border-top: 1px solid var(--border-color);
         }
         .input-row {
@@ -272,7 +235,46 @@
             color: var(--text-secondary);
         }
 
-        /* 账本视图模态 */
+        /* 侧边抽屉菜单 */
+        .drawer-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .drawer-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .drawer-menu {
+            position: absolute;
+            top: 0; left: 0; width: 300px; height: 100%;
+            background: var(--surface-color);
+            z-index: 210;
+            transform: translateX(-100%);
+            transition: transform 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            padding: 46px 20px 24px;
+        }
+        .drawer-overlay.open .drawer-menu {
+            transform: translateX(0);
+        }
+        .drawer-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            color: var(--text-primary);
+            font-size: 15px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        /* 视图模态框 (账本、大盘、搜索等) */
         .modal-view {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -282,7 +284,7 @@
             transition: transform 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
             display: flex;
             flex-direction: column;
-            padding: 16px 20px;
+            padding: 42px 20px 20px;
         }
         .modal-view.open {
             transform: translateX(0);
@@ -307,23 +309,20 @@
 <div class="phone-frame" id="app">
     <!-- 顶部状态栏与导航 -->
     <div class="top-bar">
-        <div class="icon-btn" onclick="toggleTheme()">🌓</div>
+        <div class="icon-btn" onclick="openDrawer()">☰</div>
         <div class="tabs">
             <div class="tab-item active" id="tabExpense" onclick="switchTab('EXPENSE')">支出</div>
             <div class="tab-item" id="tabIncome" onclick="switchTab('INCOME')">收入</div>
-            <div class="tab-item" id="tabTransfer" onclick="switchTab('TRANSFER')">转账</div>
         </div>
-        <div class="icon-btn" onclick="openBooksView()">📚</div>
+        <div class="icon-btn" onclick="openView('booksModal')">📚</div>
     </div>
 
-    <div class="book-pill" onclick="openBooksView()">
+    <div class="book-pill" onclick="openView('booksModal')">
         <span id="curBookName">日常消费账本</span> ▾
     </div>
 
     <!-- 中间分类内容 -->
-    <div class="content-area" id="contentArea">
-        <!-- 动态注入分类或转账 -->
-    </div>
+    <div class="content-area" id="contentArea"></div>
 
     <!-- 底部输入与计算器键盘 -->
     <div class="bottom-panel">
@@ -333,9 +332,9 @@
         </div>
         <div class="pills-row">
             <div class="pill">账户</div>
-            <div class="pill">今天 22:45</div>
+            <div class="pill">今天 23:45</div>
             <div class="pill">图片</div>
-            <div class="pill" id="extraPill">标签</div>
+            <div class="pill">标签</div>
         </div>
         <div class="keypad">
             <div class="key" onclick="pressKey('1')">1</div>
@@ -357,15 +356,126 @@
         </div>
     </div>
 
-    <!-- 账本管理列表抽屉页面 -->
+    <!-- 侧边抽屉栏 -->
+    <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer(event)">
+        <div class="drawer-menu">
+            <div style="display:flex; align-items:center; gap:14px; margin-bottom:24px;">
+                <div style="width:50px; height:50px; border-radius:50%; background:#3b82f6; display:flex; align-items:center; justify-content:center; color:white; font-size:24px;">👤</div>
+                <div>
+                    <h3 style="font-size:18px; color:var(--text-primary)">极简记账</h3>
+                    <p style="font-size:12px; color:var(--text-secondary)">坚持记账第 1 天 · 正式版</p>
+                </div>
+            </div>
+
+            <div class="drawer-item" onclick="openView('booksModal')"><span>📖 我的账本</span><span id="drawerCurBook" style="font-size:12px; color:var(--text-secondary)">日常账本 ></span></div>
+            <div class="drawer-item" onclick="openView('dashboardModal')"><span>📊 资产大盘</span><span style="font-size:12px; color:var(--text-secondary)">¥12.8万 ></span></div>
+            <div class="drawer-item" onclick="openView('searchModal')"><span>🔍 搜索账单</span><span>></span></div>
+            <div class="drawer-item" onclick="openView('periodicModal')"><span>📅 周期 · 分期</span><span style="font-size:12px; color:var(--text-secondary)">房租/分期 ></span></div>
+            <div class="drawer-item" onclick="openView('savingModal')"><span>🐷 存钱计划</span><span style="font-size:12px; color:var(--text-secondary)">365存钱法 ></span></div>
+            <div class="drawer-item" onclick="openView('backupModal')"><span>📤 数据备份导出</span><span>></span></div>
+            <div class="drawer-item" onclick="toggleTheme()"><span>🌓 主题外观切换</span><span style="font-size:12px; color:var(--text-secondary)">黑/白一键切</span></div>
+
+            <div style="margin-top:auto;" class="drawer-item" onclick="openView('aboutModal')"><span>⚙️ 设置 · 关于</span><span>v1.0.0 ></span></div>
+        </div>
+    </div>
+
+    <!-- 账本模态 -->
     <div class="modal-view" id="booksModal">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <div class="icon-btn" onclick="closeBooksView()">← 返回</div>
-            <h2 style="font-size:18px; color:var(--text-primary)">我的账本</h2>
+            <div class="icon-btn" onclick="closeView('booksModal')">← 返回</div>
+            <h2 style="font-size:18px; color:var(--text-primary)">我的账本 (无限新建)</h2>
             <div class="icon-btn" onclick="addNewBook()">+ 新建</div>
         </div>
-        <div id="booksList" style="flex:1; overflow-y:auto;">
-            <!-- 动态卡片 -->
+        <div id="booksList" style="flex:1; overflow-y:auto;"></div>
+    </div>
+
+    <!-- 资产大盘模态 -->
+    <div class="modal-view" id="dashboardModal">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+            <div class="icon-btn" onclick="closeView('dashboardModal')">← 返回</div>
+            <h2 style="font-size:18px; color:var(--text-primary)">资产大盘总览</h2>
+        </div>
+        <div style="background:var(--card-color); padding:20px; border-radius:20px; margin-bottom:16px;">
+            <p style="color:var(--text-secondary); font-size:13px;">预估全局总净资产 (CNY)</p>
+            <h1 style="color:var(--tech-blue); font-size:32px; margin:8px 0 16px;">¥ 128,560.00</h1>
+            <div style="display:flex; justify-content:space-between; font-size:13px;">
+                <div>本月收入 <b style="color:var(--mint-green)">+20,000</b></div>
+                <div>本月支出 <b style="color:var(--coral-red)">-4,850</b></div>
+                <div>净结余 <b style="color:#3b82f6">+15,150</b></div>
+            </div>
+        </div>
+        <div style="flex:1; overflow-y:auto; color:var(--text-primary);">
+            <p style="font-weight:bold; margin-bottom:10px;">四大账本分布：</p>
+            <div style="background:var(--card-color); padding:12px; border-radius:12px; margin-bottom:8px;">日常消费账本：¥ 32,800.00</div>
+            <div style="background:var(--card-color); padding:12px; border-radius:12px; margin-bottom:8px;">境内投资账本：¥ 45,000.00</div>
+            <div style="background:var(--card-color); padding:12px; border-radius:12px; margin-bottom:8px;">境外投资账本：$ 6,500.00</div>
+            <div style="background:var(--card-color); padding:12px; border-radius:12px; margin-bottom:8px;">长期储蓄账本：¥ 50,760.00</div>
+        </div>
+    </div>
+
+    <!-- 搜索账单模态 -->
+    <div class="modal-view" id="searchModal">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+            <div class="icon-btn" onclick="closeView('searchModal')">← 返回</div>
+            <h2 style="font-size:18px; color:var(--text-primary)">搜索账单流水</h2>
+        </div>
+        <input type="text" placeholder="输入关键字搜索备注或金额..." style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--card-color); color:white; outline:none; margin-bottom:16px;">
+        <div style="color:var(--text-secondary); text-align:center; margin-top:40px;">输入关键字实时搜索本地 SQLite 流水</div>
+    </div>
+
+    <!-- 周期分期模态 -->
+    <div class="modal-view" id="periodicModal">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+            <div class="icon-btn" onclick="closeView('periodicModal')">← 返回</div>
+            <h2 style="font-size:18px; color:var(--text-primary)">周期与分期管理</h2>
+        </div>
+        <div style="background:var(--card-color); padding:16px; border-radius:16px; margin-bottom:12px; color:var(--text-primary);">
+            <h4>🏠 每月固定房租 (-¥3500)</h4>
+            <p style="color:var(--text-secondary); font-size:12px; margin-top:4px;">每月 15 日自动扣除 (招商储蓄卡)</p>
+        </div>
+        <div style="background:var(--card-color); padding:16px; border-radius:16px; margin-bottom:12px; color:var(--text-primary);">
+            <h4>💻 MacBook Pro 12期免息分期</h4>
+            <div style="height:6px; background:#333; border-radius:3px; margin:8px 0; overflow:hidden;"><div style="width:25%; height:100%; background:#3b82f6;"></div></div>
+            <p style="color:var(--text-secondary); font-size:12px;">已还 3/12 期 (还剩 9,000 元) · 每期 1,000 元</p>
+        </div>
+    </div>
+
+    <!-- 存钱计划模态 -->
+    <div class="modal-view" id="savingModal">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+            <div class="icon-btn" onclick="closeView('savingModal')">← 返回</div>
+            <h2 style="font-size:18px; color:var(--text-primary)">存钱计划打卡</h2>
+        </div>
+        <div style="background:var(--card-color); padding:18px; border-radius:18px; color:var(--text-primary); margin-bottom:16px;">
+            <h4>🔥 进行中：365 存钱法 (第 18/365 天)</h4>
+            <p style="color:var(--text-secondary); font-size:12px; margin:6px 0;">已存入长期储蓄账本：<b style="color:var(--mint-green); font-size:18px;">¥ 1,389.00</b></p>
+            <button style="width:100%; padding:10px; border-radius:10px; background:#3b82f6; border:none; color:white; font-weight:bold; margin-top:6px; cursor:pointer;" onclick="alert('今日已成功打卡存入！')">今日打卡：存入 ¥171.00</button>
+        </div>
+    </div>
+
+    <!-- 数据备份模态 -->
+    <div class="modal-view" id="backupModal">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+            <div class="icon-btn" onclick="closeView('backupModal')">← 返回</div>
+            <h2 style="font-size:18px; color:var(--text-primary)">数据备份与导出</h2>
+        </div>
+        <div style="background:var(--card-color); padding:18px; border-radius:18px; color:var(--text-primary); margin-bottom:16px;">
+            <h4>📊 导出 CSV 表格账单</h4>
+            <p style="color:var(--text-secondary); font-size:13px; margin:6px 0 12px;">导出所有账本历史流水，直接用 Excel 打开。</p>
+            <button style="width:100%; padding:10px; border-radius:10px; background:#10b981; border:none; color:white; font-weight:bold; cursor:pointer;" onclick="alert('已成功导出 CSV 账单！')">立即导出全部流水 (.csv)</button>
+        </div>
+    </div>
+
+    <!-- 关于模态 -->
+    <div class="modal-view" id="aboutModal">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+            <div class="icon-btn" onclick="closeView('aboutModal')">← 返回</div>
+            <h2 style="font-size:18px; color:var(--text-primary)">设置 · 关于</h2>
+        </div>
+        <div style="text-align:center; padding:20px 0; color:var(--text-primary);">
+            <div style="width:64px; height:64px; border-radius:50%; background:#3b82f6; display:flex; align-items:center; justify-content:center; color:white; font-size:32px; margin:0 auto 12px;">👛</div>
+            <h3>极简记账 v1.0.0 正式版</h3>
+            <p style="color:var(--text-secondary); font-size:13px; margin-top:4px;">零商业化骚扰 · 纯本地存储 · 100% 隐私安全</p>
         </div>
     </div>
 </div>
@@ -395,8 +505,7 @@
                     <div class="category-item" onclick="selectCat(this)"><div class="cat-icon">⋯</div><div class="cat-name">其他</div></div>
                 </div>
             `;
-            document.getElementById('extraPill').innerText = '标签';
-        } else if (curType === 'INCOME') {
+        } else {
             root.innerHTML = `
                 <div class="category-row">
                     <div class="category-item active" onclick="selectCat(this)"><div class="cat-icon">💼</div><div class="cat-name">工资</div></div>
@@ -409,17 +518,6 @@
                     <div class="category-item" onclick="selectCat(this)"><div class="cat-icon">⋯</div><div class="cat-name">其它</div></div>
                 </div>
             `;
-            document.getElementById('extraPill').innerText = '标签';
-        } else {
-            root.innerHTML = `
-                <div class="transfer-card">
-                    <div class="acc-row">💳 <span id="accFrom">转出账户: 招商银行卡</span></div>
-                    <div class="acc-divider"></div>
-                    <div class="acc-row">👛 <span id="accTo">转入账户: 微信零钱通</span></div>
-                    <div class="swap-btn" onclick="swapAcc()">⇄</div>
-                </div>
-            `;
-            document.getElementById('extraPill').innerText = '手续费';
         }
     }
 
@@ -429,12 +527,9 @@
         if (type === 'EXPENSE') {
             document.getElementById('tabExpense').classList.add('active');
             document.documentElement.style.setProperty('--active-theme', 'var(--coral-red)');
-        } else if (type === 'INCOME') {
+        } else {
             document.getElementById('tabIncome').classList.add('active');
             document.documentElement.style.setProperty('--active-theme', 'var(--mint-green)');
-        } else {
-            document.getElementById('tabTransfer').classList.add('active');
-            document.documentElement.style.setProperty('--active-theme', 'var(--tech-blue)');
         }
         renderContent();
     }
@@ -477,50 +572,56 @@
         el.classList.add('active');
     }
 
-    function swapAcc() {
-        const from = document.getElementById('accFrom');
-        const to = document.getElementById('accTo');
-        const tmp = from.innerText;
-        from.innerText = to.innerText.replace('转入', '转出');
-        to.innerText = tmp.replace('转出', '转入');
-    }
-
     function toggleTheme() {
         isLight = !isLight;
         document.querySelector('.phone-frame').classList.toggle('light-mode', isLight);
     }
 
-    function openBooksView() {
-        const list = document.getElementById('booksList');
-        list.innerHTML = books.map((b, i) => `
-            <div class="book-card-item" style="background:${b.bg}" onclick="selectBook('${b.name}')">
-                <h3 style="font-size:20px; font-weight:bold;">${b.name}</h3>
-                <p style="font-size:12px; opacity:0.8; margin-top:4px;">${b.sub}</p>
-                ${b.name === curBook ? '<span style="position:absolute; top:12px; right:12px; background:white; color:black; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px;">✓</span>' : ''}
-            </div>
-        `).join('');
-        document.getElementById('booksModal').classList.add('open');
+    function openDrawer() {
+        document.getElementById('drawerOverlay').classList.add('open');
     }
 
-    function closeBooksView() {
-        document.getElementById('booksModal').classList.remove('open');
+    function closeDrawer(e) {
+        if (!e || e.target.id === 'drawerOverlay') {
+            document.getElementById('drawerOverlay').classList.remove('open');
+        }
+    }
+
+    function openView(id) {
+        closeDrawer();
+        if (id === 'booksModal') {
+            const list = document.getElementById('booksList');
+            list.innerHTML = books.map(b => `
+                <div class="book-card-item" style="background:${b.bg}" onclick="selectBook('${b.name}')">
+                    <h3 style="font-size:20px; font-weight:bold;">${b.name}</h3>
+                    <p style="font-size:12px; opacity:0.8; margin-top:4px;">${b.sub}</p>
+                    ${b.name === curBook ? '<span style="position:absolute; top:12px; right:12px; background:white; color:black; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px;">✓</span>' : ''}
+                </div>
+            `).join('');
+        }
+        document.getElementById(id).classList.add('open');
+    }
+
+    function closeView(id) {
+        document.getElementById(id).classList.remove('open');
     }
 
     function selectBook(name) {
         curBook = name;
         document.getElementById('curBookName').innerText = name;
-        closeBooksView();
+        document.getElementById('drawerCurBook').innerText = name + ' >';
+        closeView('booksModal');
     }
 
     function addNewBook() {
         const name = prompt('请输入新账本名称:');
         if (name) {
             books.push({ name: name, sub: '自定义专属账本', bg: 'linear-gradient(135deg, #2b3a4a, #495867)' });
-            openBooksView();
+            openView('booksModal');
         }
     }
 
-    // 初始化加载
+    // 初始化渲染
     renderContent();
 </script>
 </body>

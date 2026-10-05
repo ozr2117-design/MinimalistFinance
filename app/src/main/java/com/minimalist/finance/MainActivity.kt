@@ -11,9 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.minimalist.finance.ui.screen.BooksScreen
-import com.minimalist.finance.ui.screen.DrawerMenu
-import com.minimalist.finance.ui.screen.RecordScreen
+import com.minimalist.finance.ui.screen.*
 import com.minimalist.finance.ui.theme.MinimalistFinanceTheme
 import com.minimalist.finance.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
@@ -37,12 +35,14 @@ class MainActivity : ComponentActivity() {
                         ModalDrawerSheet {
                             DrawerMenu(
                                 viewModel = viewModel,
-                                onNavigateToBooks = {
-                                    navController.navigate("books")
-                                },
-                                onCloseDrawer = {
-                                    scope.launch { drawerState.close() }
-                                }
+                                onNavigateToBooks = { navController.navigate("books") },
+                                onNavigateToDashboard = { navController.navigate("dashboard") },
+                                onNavigateToSearch = { navController.navigate("search") },
+                                onNavigateToPeriodic = { navController.navigate("periodic") },
+                                onNavigateToSaving = { navController.navigate("saving") },
+                                onNavigateToBackup = { navController.navigate("backup") },
+                                onNavigateToAbout = { navController.navigate("about") },
+                                onCloseDrawer = { scope.launch { drawerState.close() } }
                             )
                         }
                     }
@@ -55,20 +55,49 @@ class MainActivity : ComponentActivity() {
                         composable("record") {
                             RecordScreen(
                                 viewModel = viewModel,
-                                onOpenDrawer = {
-                                    scope.launch { drawerState.open() }
-                                },
-                                onNavigateToBooks = {
-                                    navController.navigate("books")
-                                }
+                                onOpenDrawer = { scope.launch { drawerState.open() } },
+                                onNavigateToBooks = { navController.navigate("books") }
                             )
                         }
                         composable("books") {
                             BooksScreen(
                                 viewModel = viewModel,
-                                onBack = {
-                                    navController.popBackStack()
-                                }
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("dashboard") {
+                            AssetDashboardScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("search") {
+                            SearchRecordsScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("periodic") {
+                            PeriodicScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("saving") {
+                            SavingPlansScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("backup") {
+                            BackupExportScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("about") {
+                            AboutScreen(
+                                onBack = { navController.popBackStack() }
                             )
                         }
                     }
