@@ -53,11 +53,15 @@ fun RecordScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(top = 10.dp)
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -149,6 +153,8 @@ fun RecordScreen(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .background(cardBg)
+                    .navigationBarsPadding()
+                    .padding(bottom = 8.dp)
             ) {
                 // 备注输入框与金额行
                 Row(

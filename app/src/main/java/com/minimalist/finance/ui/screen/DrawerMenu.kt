@@ -42,7 +42,8 @@ fun DrawerMenu(
             .fillMaxHeight()
             .width(300.dp)
             .background(if (isDark) DarkSurface else LightSurface)
-            .padding(vertical = 32.dp, horizontal = 20.dp),
+            .statusBarsPadding()
+            .padding(top = 20.dp, bottom = 24.dp, start = 20.dp, end = 20.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {

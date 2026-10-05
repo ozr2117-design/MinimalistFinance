@@ -44,8 +44,10 @@ fun BooksScreen(
         topBar = {
             Row(
                 modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(top = 10.dp)
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
