@@ -188,7 +188,6 @@ fun DrawerMenu(
             Spacer(modifier = Modifier.width(16.dp))
             Text(text = "设置 · 关于", fontSize = 15.sp, color = textSecondary)
         }
-        }
     }
 
     // 主题切换弹窗
