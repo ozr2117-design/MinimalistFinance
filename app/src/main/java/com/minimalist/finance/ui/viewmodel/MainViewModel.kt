@@ -294,10 +294,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 分期计划增删
+    fun updatePeriodicRule(rule: PeriodicRule) {
+        viewModelScope.launch {
+            periodicRuleDao.updateRule(rule)
+        }
+    }
+
+    // 分期计划增删与修改
     fun addInstallmentPlan(plan: InstallmentPlan) {
         viewModelScope.launch {
             installmentPlanDao.insertPlan(plan)
+        }
+    }
+
+    fun updateInstallmentPlan(plan: InstallmentPlan) {
+        viewModelScope.launch {
+            installmentPlanDao.updatePlan(plan)
         }
     }
 

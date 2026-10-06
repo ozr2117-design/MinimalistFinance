@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.minimalist.finance.ui.theme.*
@@ -78,7 +79,7 @@ fun AboutScreen(
                 }
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(text = "数簿", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textColor)
-                Text(text = "版本 1.0.3 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
+                Text(text = "版本 1.0.4 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
             }
 
             item {
@@ -89,12 +90,17 @@ fun AboutScreen(
                         .background(cardBg)
                         .padding(18.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         Text(
                             text = "「每一笔都有数，过理性的生活」",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
-                            color = textColor
+                            color = textColor,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
                         )
                         Text(
                             text = "数簿的目标不是说教理财，而是帮您在每一次收支中看清生活的真相。\n\n拒绝繁琐套路：无 VIP 限制、无广告、纯粹本地离线存储，把记账做到极致。",
