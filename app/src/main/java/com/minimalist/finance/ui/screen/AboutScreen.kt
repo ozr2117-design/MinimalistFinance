@@ -78,7 +78,7 @@ fun AboutScreen(
                 }
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(text = "数簿", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textColor)
-                Text(text = "版本 1.0.0 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
+                Text(text = "版本 1.0.1 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
             }
 
             item {
