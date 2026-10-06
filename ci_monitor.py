@@ -3,9 +3,13 @@ import json
 import urllib.request
 import time
 import os
+import sys
 import zipfile
 import shutil
 import re
+
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 def get_github_token():
     p = subprocess.Popen(
@@ -31,7 +35,7 @@ def get_version_name():
             return m.group(1)
     except Exception as e:
         print("Error reading version:", e)
-    return "1.0.1"
+    return "1.0.2"
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -68,7 +72,9 @@ def main():
                     status = latest["status"]
                     conclusion = latest.get("conclusion")
                     commit_msg = latest["head_commit"]["message"].split("\n")[0]
-                    print(f"[{attempt+1}] Run #{latest['run_number']} ({commit_msg[:30]}...): Status={status}, Conclusion={conclusion}")
+                    # 安全打印，避免 Windows 控制台因为 emoji 或特殊编码抛异常
+                    safe_msg = commit_msg.encode('gbk', 'replace').decode('gbk')
+                    print(f"[{attempt+1}] Run #{latest['run_number']} ({safe_msg[:30]}...): Status={status}, Conclusion={conclusion}")
                     
                     if status == "completed":
                         if conclusion == "success":
