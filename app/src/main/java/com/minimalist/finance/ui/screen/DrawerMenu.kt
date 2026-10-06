@@ -45,11 +45,11 @@ fun DrawerMenu(
 
     Column(
         modifier = modifier
-            .fillMaxHeight()
-            .width(300.dp)
+            .fillMaxSize()
             .background(if (isDark) DarkSurface else LightSurface)
             .statusBarsPadding()
-            .padding(top = 20.dp, bottom = 24.dp, start = 20.dp, end = 20.dp),
+            .navigationBarsPadding()
+            .padding(top = 20.dp, bottom = 20.dp, start = 20.dp, end = 20.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
@@ -164,16 +164,17 @@ fun DrawerMenu(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
                 .clickable {
                     onCloseDrawer()
                     onNavigateToAbout()
                 }
-                .padding(vertical = 8.dp),
+                .padding(vertical = 12.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(imageVector = Icons.Default.Settings, contentDescription = "设置", tint = textSecondary)
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(text = "设置 · 关于", fontSize = 15.sp, color = textSecondary)
+            Icon(imageVector = Icons.Default.Settings, contentDescription = "设置", tint = textSecondary, modifier = Modifier.size(22.dp))
+            Spacer(modifier = Modifier.width(18.dp))
+            Text(text = "设置 · 关于", fontSize = 15.sp, color = textSecondary, fontWeight = FontWeight.Medium)
         }
     }
 
