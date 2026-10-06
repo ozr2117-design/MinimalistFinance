@@ -78,7 +78,7 @@ fun AboutScreen(
                 }
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(text = "数簿", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textColor)
-                Text(text = "版本 1.0.1 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
+                Text(text = "版本 1.0.2 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
             }
 
             item {
@@ -90,9 +90,15 @@ fun AboutScreen(
                         .padding(18.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(text = "🌟 产品初心", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                        Text(text = "🎯 我们的目标", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
                         Text(
-                            text = "「数簿」源自粤港民间传统的流水账册名，寓意清晰明了、每一笔都有数。\n\n拒绝繁琐与商业化套路：本软件彻底移除所有 VIP 会员购买限制、无任何开屏或插页广告、无理财推销骚扰。\n\n纯粹本地离线存储：涵盖日常消费、境内外投资、长期储蓄等多套独立账簿体系，支持无限新建与本地极速秒开。",
+                            text = "「每一笔都有数，过理性的生活」",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        Text(
+                            text = "数簿的目标不是说教理财，而是帮您在每一次收支中看清生活的真相。\n\n拒绝繁琐套路：无 VIP 限制、无广告、纯粹本地离线存储，把记账做到极致。",
                             fontSize = 13.sp,
                             color = textSecondary,
                             lineHeight = 20.sp
