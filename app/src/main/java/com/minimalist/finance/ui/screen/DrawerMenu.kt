@@ -53,36 +53,36 @@ fun DrawerMenu(
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
-            // 用户头部卡片 (无 VIP 标识)
+            // 用户头部卡片 (传统数簿印章)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(54.dp)
-                        .clip(CircleShape)
-                        .background(if (isDark) Color(0xFF282D3A) else Color(0xFFE2E8F0)),
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF8B1E1E)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "用户头像",
-                        tint = BlueAccent,
-                        modifier = Modifier.size(32.dp)
+                    Text(
+                        text = "數",
+                        color = Color(0xFFFFD700),
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
                 Column {
                     Text(
-                        text = "极简记账",
-                        fontSize = 18.sp,
+                        text = "数簿",
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         color = textColor
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "坚持记账第 1 天",
+                        text = "每一笔都有数",
                         fontSize = 12.sp,
                         color = textSecondary
                     )

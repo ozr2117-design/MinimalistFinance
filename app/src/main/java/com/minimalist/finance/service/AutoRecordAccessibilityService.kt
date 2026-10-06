@@ -288,7 +288,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             mainHandler.post {
                 Toast.makeText(
                     applicationContext,
-                    "⚡ 极简记账: 自动记录 ¥${String.format(java.util.Locale.CHINA, "%.2f", amount)} ($catName · $accountName · $displayMerchant)",
+                    "⚡ 数簿: 自动记录 ¥${String.format(java.util.Locale.CHINA, "%.2f", amount)} ($catName · $accountName · $displayMerchant)",
                     Toast.LENGTH_LONG
                 ).show()
             }

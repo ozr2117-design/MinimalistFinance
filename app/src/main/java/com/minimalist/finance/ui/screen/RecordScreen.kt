@@ -5,12 +5,15 @@ import android.app.TimePickerDialog
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -65,6 +68,7 @@ fun RecordScreen(
     var showAccountSheet by remember { mutableStateOf(false) }
     val accountSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showTagDialog by remember { mutableStateOf(false) }
+    var showRemarkDialog by remember { mutableStateOf(false) }
 
     // 系统相册选择器
     val imagePicker = rememberLauncherForActivityResult(
@@ -219,16 +223,39 @@ fun RecordScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = if (remark.isEmpty()) "点此输入备注..." else remark,
-                        color = textSecondary,
-                        fontSize = 15.sp,
+                    Row(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable {
-                                viewModel.remarkText.value = "日常记录"
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showRemarkDialog = true }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (remark.isEmpty()) "点此输入备注..." else remark,
+                            color = if (remark.isEmpty()) textSecondary else textColor,
+                            fontSize = 15.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (remark.isNotEmpty()) {
+                            IconButton(
+                                onClick = { viewModel.remarkText.value = "" },
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .padding(start = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "清空备注",
+                                    tint = textSecondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
-                    )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = if (currentBook?.currency == "USD") "$ $amountExp" else "¥ $amountExp",
                         fontSize = 36.sp,
@@ -340,6 +367,87 @@ fun RecordScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showTagDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 备注自由输入与快捷短语弹窗
+    if (showRemarkDialog) {
+        var tempRemark by remember { mutableStateOf(remark) }
+        val quickRemarks = listOf("早餐", "午餐", "晚餐", "夜宵", "超市", "打车", "水果", "奶茶", "聚餐", "日用", "房租", "水电", "网购", "转账")
+        val quickScrollState = rememberScrollState()
+
+        AlertDialog(
+            onDismissRequest = { showRemarkDialog = false },
+            title = {
+                Text(
+                    text = "记账备注",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    OutlinedTextField(
+                        value = tempRemark,
+                        onValueChange = { tempRemark = it },
+                        placeholder = { Text("输入备注详情...") },
+                        singleLine = false,
+                        maxLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "快捷常用短语：",
+                        fontSize = 12.sp,
+                        color = textSecondary
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(quickScrollState),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        quickRemarks.forEach { tagText ->
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (tempRemark.contains(tagText)) themeColor.copy(alpha = 0.15f) else (if (isDark) DarkSurface else Color(0xFFF1F5F9)),
+                                border = if (tempRemark.contains(tagText)) BorderStroke(1.dp, themeColor) else null,
+                                modifier = Modifier.clickable {
+                                    tempRemark = if (tempRemark.isBlank()) {
+                                        tagText
+                                    } else if (!tempRemark.contains(tagText)) {
+                                        "$tempRemark $tagText"
+                                    } else {
+                                        tempRemark
+                                    }
+                                }
+                            ) {
+                                Text(
+                                    text = tagText,
+                                    fontSize = 12.sp,
+                                    color = if (tempRemark.contains(tagText)) themeColor else textColor,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.remarkText.value = tempRemark
+                    showRemarkDialog = false
+                }) { Text("确定") }
+            },
+            dismissButton = {
+                Row {
+                    if (tempRemark.isNotEmpty()) {
+                        TextButton(onClick = { tempRemark = "" }) { Text("清空") }
+                    }
+                    TextButton(onClick = { showRemarkDialog = false }) { Text("取消") }
+                }
             }
         )
     }

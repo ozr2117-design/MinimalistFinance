@@ -133,7 +133,7 @@ fun AutoRecordScreen(
                                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
                             }
                             context.startActivity(intent)
-                            Toast.makeText(context, "请在「已下载的应用」中找到「极简记账」并开启", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "请在「已下载的应用」中找到「数簿」并开启", Toast.LENGTH_LONG).show()
                         } catch (e: Exception) {
                             Toast.makeText(context, "无法打开系统无障碍设置，请手动在手机设置中开启", Toast.LENGTH_SHORT).show()
                         }
@@ -187,7 +187,7 @@ fun AutoRecordScreen(
                             ).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
                             context.startActivity(intent)
                         } catch (e: Exception) {
-                            Toast.makeText(context, "请在电池设置中将极简记账设为允许后台运行", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "请在电池设置中将数簿设为允许后台运行", Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
@@ -339,7 +339,7 @@ fun AutoRecordScreen(
                                 }
                             }
                         ) {
-                            Text("直达极简记账应用设置 >", color = BlueAccent, fontSize = 13.sp)
+                            Text("直达数簿应用设置 >", color = BlueAccent, fontSize = 13.sp)
                         }
                     }
                 }

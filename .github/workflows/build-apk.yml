@@ -32,7 +32,7 @@ jobs:
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: 极简记账-app-debug
+        name: 数簿-app-debug
         path: app/build/outputs/apk/debug/*.apk
 
     - name: Release APK to GitHub Release (on tag or manual)

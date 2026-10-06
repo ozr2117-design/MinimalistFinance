@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">极简记账</string>
-    <string name="accessibility_service_description">极简记账无障碍服务：在您使用微信、支付宝或云闪付付款成功后，自动提取账单金额与商户，无感记录到本地 SQLite 数据库，100% 本地运行，绝不上传任何隐私。</string>
+    <string name="app_name">数簿</string>
+    <string name="accessibility_service_description">数簿无障碍服务：在您使用微信、支付宝或云闪付付款成功后，自动提取账单金额与商户，无感记录到本地 SQLite 数据库，100% 本地运行，绝不上传任何隐私。</string>
 </resources>

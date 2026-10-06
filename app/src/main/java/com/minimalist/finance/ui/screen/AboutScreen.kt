@@ -65,14 +65,19 @@ fun AboutScreen(
                 Box(
                     modifier = Modifier
                         .size(80.dp)
-                        .clip(CircleShape)
-                        .background(BlueAccent),
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(Color(0xFF8B1E1E)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = Color.White, modifier = Modifier.size(44.dp))
+                    Text(
+                        text = "數",
+                        color = Color(0xFFFFD700),
+                        fontSize = 44.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
                 Spacer(modifier = Modifier.height(14.dp))
-                Text(text = "极简记账", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = textColor)
+                Text(text = "数簿", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textColor)
                 Text(text = "版本 1.0.0 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
             }
 
@@ -87,7 +92,7 @@ fun AboutScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(text = "🌟 产品初心", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
                         Text(
-                            text = "拒绝繁琐与商业化套路：本软件彻底移除所有 VIP 会员购买限制、无任何开屏或插页广告、无理财推销骚扰。\n\n专为纯粹的个人财务记录而生：涵盖日常消费、境内外投资、长期储蓄四大独立账本体系，支持无限新建与本地极速秒开。",
+                            text = "「数簿」源自粤港民间传统的流水账册名，寓意清晰明了、每一笔都有数。\n\n拒绝繁琐与商业化套路：本软件彻底移除所有 VIP 会员购买限制、无任何开屏或插页广告、无理财推销骚扰。\n\n纯粹本地离线存储：涵盖日常消费、境内外投资、长期储蓄等多套独立账簿体系，支持无限新建与本地极速秒开。",
                             fontSize = 13.sp,
                             color = textSecondary,
                             lineHeight = 20.sp

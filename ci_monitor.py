@@ -84,7 +84,8 @@ for attempt in range(60): # up to 10 minutes
                                                 os.remove(zip_path)
                                             if os.path.exists("app-debug.apk"):
                                                 shutil.copyfile("app-debug.apk", "极简记账-v1.0.0.apk")
-                                                print("Successfully updated app-debug.apk and 极简记账-v1.0.0.apk!")
+                                                shutil.copyfile("app-debug.apk", "数簿-v1.0.0.apk")
+                                                print("Successfully updated app-debug.apk, 极简记账-v1.0.0.apk and 数簿-v1.0.0.apk!")
                                                 exit(0)
                     else:
                         print(f"Build failed with conclusion: {conclusion}")
