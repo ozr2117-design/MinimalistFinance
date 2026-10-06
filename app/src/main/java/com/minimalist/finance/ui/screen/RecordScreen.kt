@@ -371,10 +371,10 @@ fun RecordScreen(
         )
     }
 
-    // 备注自由输入与快捷短语弹窗
+    // 备注自由输入与历史记忆常用词弹窗
     if (showRemarkDialog) {
         var tempRemark by remember { mutableStateOf(remark) }
-        val quickRemarks = listOf("早餐", "午餐", "晚餐", "夜宵", "超市", "打车", "水果", "奶茶", "聚餐", "日用", "房租", "水电", "网购", "转账")
+        val recentRemarks by viewModel.recentRemarks.collectAsState()
         val quickScrollState = rememberScrollState()
 
         AlertDialog(
@@ -393,51 +393,57 @@ fun RecordScreen(
                     OutlinedTextField(
                         value = tempRemark,
                         onValueChange = { tempRemark = it },
-                        placeholder = { Text("输入备注详情...") },
+                        placeholder = { Text("输入备注详情 (如：买菜、加油、日用品)...") },
                         singleLine = false,
                         maxLines = 3,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Text(
-                        text = "快捷常用短语：",
-                        fontSize = 12.sp,
-                        color = textSecondary
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(quickScrollState),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        quickRemarks.forEach { tagText ->
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (tempRemark.contains(tagText)) themeColor.copy(alpha = 0.15f) else (if (isDark) DarkSurface else Color(0xFFF1F5F9)),
-                                border = if (tempRemark.contains(tagText)) BorderStroke(1.dp, themeColor) else null,
-                                modifier = Modifier.clickable {
-                                    tempRemark = if (tempRemark.isBlank()) {
-                                        tagText
-                                    } else if (!tempRemark.contains(tagText)) {
-                                        "$tempRemark $tagText"
-                                    } else {
-                                        tempRemark
+
+                    if (recentRemarks.isNotEmpty()) {
+                        Text(
+                            text = "最近常用备注：",
+                            fontSize = 12.sp,
+                            color = textSecondary
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(quickScrollState),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            recentRemarks.forEach { tagText ->
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (tempRemark == tagText) themeColor.copy(alpha = 0.15f) else (if (isDark) DarkSurface else Color(0xFFF1F5F9)),
+                                    border = if (tempRemark == tagText) BorderStroke(1.dp, themeColor) else null,
+                                    modifier = Modifier.clickable {
+                                        tempRemark = tagText
                                     }
+                                ) {
+                                    Text(
+                                        text = tagText,
+                                        fontSize = 13.sp,
+                                        color = if (tempRemark == tagText) themeColor else textColor,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    )
                                 }
-                            ) {
-                                Text(
-                                    text = tagText,
-                                    fontSize = 12.sp,
-                                    color = if (tempRemark.contains(tagText)) themeColor else textColor,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                )
                             }
                         }
+                    } else {
+                        Text(
+                            text = "💡 输入备注后，系统将自动记住并置顶您的常用词",
+                            fontSize = 12.sp,
+                            color = textSecondary
+                        )
                     }
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     viewModel.remarkText.value = tempRemark
+                    if (tempRemark.isNotBlank()) {
+                        viewModel.recordRemarkToHistory(tempRemark)
+                    }
                     showRemarkDialog = false
                 }) { Text("确定") }
             },

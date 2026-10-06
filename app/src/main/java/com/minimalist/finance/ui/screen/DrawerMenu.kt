@@ -150,8 +150,9 @@ fun DrawerMenu(
             )
 
             DrawerMenuItem(
-                icon = Icons.Default.FileDownload,
-                title = "数据备份导出",
+                icon = Icons.Default.Sync,
+                title = "数据备份与导入",
+                subtitle = "换机迁移 · 导出恢复",
                 textColor = textColor,
                 textSecondary = textSecondary,
                 onClick = {

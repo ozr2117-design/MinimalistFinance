@@ -66,6 +66,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var amountExpression = MutableStateFlow("0.0")
     var remarkText = MutableStateFlow("")
 
+    // 智能记忆用户最近历史备注 (自动将最新输入的置于第1位)
+    val recentRemarks = MutableStateFlow<List<String>>(emptyList())
+
     // 流水观察
     val allRecords = recordDao.getAllRecords().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
@@ -78,6 +81,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val installmentPlans = installmentPlanDao.getAllPlans().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     init {
+        // 读取持久化常用备注
+        val prefs = application.getSharedPreferences("shubu_prefs", android.content.Context.MODE_PRIVATE)
+        val saved = prefs.getString("recent_remarks", "") ?: ""
+        val initialList = if (saved.isNotBlank()) saved.split("|||").filter { it.isNotBlank() } else emptyList()
+        recentRemarks.value = initialList
+
+        viewModelScope.launch {
+            try {
+                val dbRemarks = recordDao.getRecentRawRemarks().map { it.trim() }.filter { it.isNotBlank() }.distinct()
+                val merged = (recentRemarks.value + dbRemarks).distinct().take(30)
+                recentRemarks.value = merged
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+
         viewModelScope.launch {
             allBooks.collect { books ->
                 if (books.isNotEmpty() && currentBookId.value == 1L) {
@@ -144,11 +163,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // 记录备注到历史并置顶于第1位
+    fun recordRemarkToHistory(remark: String) {
+        val trimmed = remark.trim()
+        if (trimmed.isBlank()) return
+        val current = recentRemarks.value.toMutableList()
+        current.remove(trimmed)
+        current.add(0, trimmed)
+        val updated = current.take(30)
+        recentRemarks.value = updated
+        viewModelScope.launch {
+            val prefs = getApplication<Application>().getSharedPreferences("shubu_prefs", android.content.Context.MODE_PRIVATE)
+            prefs.edit().putString("recent_remarks", updated.joinToString("|||")).apply()
+        }
+    }
+
     // 保存当前流水
     fun saveRecord(onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             val amount = evaluateAmount()
             if (amount <= 0.0) return@launch
+
+            val currentRemark = remarkText.value.trim()
+            if (currentRemark.isNotEmpty()) {
+                recordRemarkToHistory(currentRemark)
+            }
 
             val record = Record(
                 bookId = currentBookId.value,
@@ -157,7 +196,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 categoryId = selectedCategoryId.value,
                 categoryName = selectedCategoryName.value,
                 accountName = selectedAccountName.value,
-                remark = remarkText.value,
+                remark = currentRemark,
                 tag = selectedTag.value,
                 timestamp = selectedTimestamp.value
             )
@@ -256,6 +295,218 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteInstallmentPlan(plan: InstallmentPlan) {
         viewModelScope.launch {
             installmentPlanDao.deletePlan(plan)
+        }
+    }
+
+    // ==========================================
+    // 数据备份与导入核心引擎 (JSON 全量迁移 + CSV 表格)
+    // ==========================================
+
+    fun exportFullJsonBackup(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val books = bookDao.getAllBooksList()
+                val accounts = accountDao.getAllAccountsList()
+                val categories = categoryDao.getAllCategoriesList()
+                val records = recordDao.getAllRecordsList()
+
+                val root = org.json.JSONObject()
+                root.put("version", 1)
+                root.put("appName", "数簿")
+                root.put("exportTime", System.currentTimeMillis())
+
+                val booksArr = org.json.JSONArray()
+                for (b in books) {
+                    val obj = org.json.JSONObject()
+                    obj.put("id", b.id)
+                    obj.put("name", b.name)
+                    obj.put("subtitle", b.subtitle)
+                    obj.put("type", b.type.name)
+                    obj.put("currency", b.currency)
+                    obj.put("isDefault", b.isDefault)
+                    booksArr.put(obj)
+                }
+                root.put("books", booksArr)
+
+                val accountsArr = org.json.JSONArray()
+                for (a in accounts) {
+                    val obj = org.json.JSONObject()
+                    obj.put("id", a.id)
+                    obj.put("name", a.name)
+                    obj.put("balance", a.balance)
+                    obj.put("currency", a.currency)
+                    accountsArr.put(obj)
+                }
+                root.put("accounts", accountsArr)
+
+                val catsArr = org.json.JSONArray()
+                for (c in categories) {
+                    val obj = org.json.JSONObject()
+                    obj.put("id", c.id)
+                    obj.put("bookId", c.bookId)
+                    obj.put("name", c.name)
+                    obj.put("iconName", c.iconName)
+                    obj.put("type", c.type.name)
+                    obj.put("sortOrder", c.sortOrder)
+                    catsArr.put(obj)
+                }
+                root.put("categories", catsArr)
+
+                val recordsArr = org.json.JSONArray()
+                for (r in records) {
+                    val obj = org.json.JSONObject()
+                    obj.put("id", r.id)
+                    obj.put("bookId", r.bookId)
+                    obj.put("type", r.type.name)
+                    obj.put("amount", r.amount)
+                    obj.put("categoryId", r.categoryId ?: 0L)
+                    obj.put("categoryName", r.categoryName)
+                    obj.put("accountName", r.accountName)
+                    obj.put("remark", r.remark)
+                    obj.put("tag", r.tag)
+                    obj.put("timestamp", r.timestamp)
+                    recordsArr.put(obj)
+                }
+                root.put("records", recordsArr)
+
+                onResult(root.toString(2))
+            } catch (e: Exception) {
+                onResult("")
+            }
+        }
+    }
+
+    fun exportRecordsCsv(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val records = recordDao.getAllRecordsList()
+                val sb = java.lang.StringBuilder()
+                sb.append("\uFEFF") // UTF-8 BOM，防止 Excel 打开乱码
+                sb.append("时间,账本编号,类型,金额,分类,账户,备注,标签\n")
+                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                for (r in records) {
+                    val timeStr = sdf.format(Date(r.timestamp))
+                    val typeStr = if (r.type == TransactionType.EXPENSE) "支出" else "收入"
+                    val cleanRemark = r.remark.replace(",", "，").replace("\n", " ")
+                    val cleanTag = r.tag.replace(",", "，")
+                    sb.append("$timeStr,${r.bookId},$typeStr,${r.amount},${r.categoryName},${r.accountName},$cleanRemark,$cleanTag\n")
+                }
+                onResult(sb.toString())
+            } catch (e: Exception) {
+                onResult("")
+            }
+        }
+    }
+
+    fun importFullJsonBackup(jsonStr: String, overwrite: Boolean, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val root = org.json.JSONObject(jsonStr)
+                if (overwrite) {
+                    recordDao.clearAllRecords()
+                }
+
+                var importedAccounts = 0
+                if (root.has("accounts")) {
+                    val accountsArr = root.getJSONArray("accounts")
+                    for (i in 0 until accountsArr.length()) {
+                        val obj = accountsArr.getJSONObject(i)
+                        val name = obj.getString("name").trim()
+                        val balance = obj.optDouble("balance", 0.0)
+                        val currency = obj.optString("currency", "CNY")
+                        val existing = accountDao.getAllAccountsList().firstOrNull { it.name == name }
+                        if (existing == null) {
+                            accountDao.insertAccount(Account(name = name, balance = balance, currency = currency))
+                            importedAccounts++
+                        } else if (overwrite) {
+                            accountDao.updateAccount(existing.copy(balance = balance))
+                        }
+                    }
+                }
+
+                var importedRecords = 0
+                if (root.has("records")) {
+                    val recordsArr = root.getJSONArray("records")
+                    val recordList = mutableListOf<Record>()
+                    for (i in 0 until recordsArr.length()) {
+                        val obj = recordsArr.getJSONObject(i)
+                        val typeStr = obj.optString("type", "EXPENSE")
+                        val type = if (typeStr == "INCOME") TransactionType.INCOME else TransactionType.EXPENSE
+                        val record = Record(
+                            bookId = obj.optLong("bookId", 1L),
+                            type = type,
+                            amount = obj.getDouble("amount"),
+                            categoryId = if (obj.has("categoryId") && obj.getLong("categoryId") != 0L) obj.getLong("categoryId") else null,
+                            categoryName = obj.optString("categoryName", "其他"),
+                            accountName = obj.optString("accountName", "微信"),
+                            remark = obj.optString("remark", ""),
+                            tag = obj.optString("tag", ""),
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                        )
+                        recordList.add(record)
+                    }
+                    if (recordList.isNotEmpty()) {
+                        recordDao.insertRecords(recordList)
+                        importedRecords = recordList.size
+                    }
+                }
+
+                // 刷新常用备注
+                val dbRemarks = recordDao.getRecentRawRemarks().map { it.trim() }.filter { it.isNotBlank() }.distinct()
+                recentRemarks.value = dbRemarks.take(30)
+
+                onResult(true, "成功恢复 $importedRecords 条记账流水与 $importedAccounts 个账户！")
+            } catch (e: Exception) {
+                onResult(false, "备份解析失败: ${e.message ?: "格式错误"}")
+            }
+        }
+    }
+
+    fun importRecordsCsv(csvStr: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val lines = csvStr.lines().filter { it.isNotBlank() }
+                if (lines.size <= 1) {
+                    onResult(false, "CSV 文件内容为空或无有效记录")
+                    return@launch
+                }
+                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                val recordList = mutableListOf<Record>()
+                for (line in lines.drop(1)) {
+                    val parts = line.split(",").map { it.trim().trim('\uFEFF') }
+                    if (parts.size >= 4) {
+                        val timeStr = parts.getOrNull(0) ?: ""
+                        val parsedTime = try { sdf.parse(timeStr)?.time ?: System.currentTimeMillis() } catch (e: Exception) { System.currentTimeMillis() }
+                        val typeStr = parts.getOrNull(2) ?: "支出"
+                        val type = if (typeStr.contains("收入")) TransactionType.INCOME else TransactionType.EXPENSE
+                        val amount = parts.getOrNull(3)?.toDoubleOrNull() ?: continue
+                        val catName = parts.getOrNull(4) ?: "其他"
+                        val accName = parts.getOrNull(5) ?: "微信"
+                        val remark = parts.getOrNull(6) ?: ""
+                        val tag = parts.getOrNull(7) ?: ""
+                        recordList.add(
+                            Record(
+                                bookId = currentBookId.value,
+                                type = type,
+                                amount = amount,
+                                categoryName = catName,
+                                accountName = accName,
+                                remark = remark,
+                                tag = tag,
+                                timestamp = parsedTime
+                            )
+                        )
+                    }
+                }
+                if (recordList.isNotEmpty()) {
+                    recordDao.insertRecords(recordList)
+                    onResult(true, "成功导入 ${recordList.size} 条流水记录！")
+                } else {
+                    onResult(false, "未解析到符合格式的记账流水行")
+                }
+            } catch (e: Exception) {
+                onResult(false, "CSV 解析失败: ${e.message}")
+            }
         }
     }
 }

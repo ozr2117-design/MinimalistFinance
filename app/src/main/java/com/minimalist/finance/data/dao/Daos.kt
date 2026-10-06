@@ -21,8 +21,8 @@ interface BookDao {
     @Delete
     suspend fun deleteBook(book: Book)
 
-    @Query("UPDATE books SET isDefault = (id = :bookId)")
-    suspend fun setDefaultBook(bookId: Long)
+    @Query("SELECT * FROM books ORDER BY id ASC")
+    suspend fun getAllBooksList(): List<Book>
 }
 
 @Dao
@@ -35,6 +35,9 @@ interface CategoryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCategory(category: Category): Long
+
+    @Query("SELECT * FROM categories ORDER BY id ASC")
+    suspend fun getAllCategoriesList(): List<Category>
 }
 
 @Dao
@@ -44,6 +47,12 @@ interface AccountDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAccount(account: Account): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAccounts(accounts: List<Account>)
+
+    @Query("SELECT * FROM accounts ORDER BY id ASC")
+    suspend fun getAllAccountsList(): List<Account>
 
     @Update
     suspend fun updateAccount(account: Account)
@@ -60,8 +69,17 @@ interface RecordDao {
     @Query("SELECT * FROM records ORDER BY timestamp DESC")
     fun getAllRecords(): Flow<List<Record>>
 
+    @Query("SELECT * FROM records ORDER BY timestamp ASC")
+    suspend fun getAllRecordsList(): List<Record>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRecord(record: Record): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRecords(records: List<Record>)
+
+    @Query("SELECT remark FROM records WHERE remark IS NOT NULL AND remark != '' ORDER BY id DESC LIMIT 100")
+    suspend fun getRecentRawRemarks(): List<String>
 
     @Delete
     suspend fun deleteRecord(record: Record)
