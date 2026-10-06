@@ -26,8 +26,8 @@ import com.minimalist.finance.ui.theme.*
 import com.minimalist.finance.ui.viewmodel.MainViewModel
 import java.util.Locale
 
-private data class BookStat(val book: Book, val netAmount: Double, val symbol: String)
-private data class AccountStat(val account: Account, val currentBalance: Double, val symbol: String)
+data class BookStat(val book: Book, val netAmount: Double, val symbol: String)
+data class AccountStat(val account: Account, val currentBalance: Double, val symbol: String)
 
 @Composable
 fun AssetDashboardScreen(
@@ -161,7 +161,7 @@ fun AssetDashboardScreen(
                 Text(text = "四大账本资产分布", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
             }
 
-            items(bookStats, key = { it.book.id }) { stat ->
+            items(bookStats, key = { "book_${it.book.id}" }) { stat ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -203,7 +203,7 @@ fun AssetDashboardScreen(
                 }
             }
 
-            items(accountStats, key = { it.account.id }) { stat ->
+            items(accountStats, key = { "account_${it.account.id}_${it.account.name}" }) { stat ->
                 val accIcon = getAccountIcon(stat.account.name)
                 Row(
                     modifier = Modifier
@@ -284,7 +284,7 @@ fun AssetDashboardScreen(
 
 private fun getAccountIcon(name: String): ImageVector {
     return when {
-        name.contains("微信") -> Icons.Default.ChatBubble
+        name.contains("微信") -> Icons.Default.Chat
         name.contains("支付宝") -> Icons.Default.AccountBalanceWallet
         name.contains("卡") -> Icons.Default.CreditCard
         name.contains("现金") -> Icons.Default.Paid

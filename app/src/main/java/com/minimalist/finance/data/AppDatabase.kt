@@ -7,6 +7,7 @@ import com.minimalist.finance.data.dao.*
 import com.minimalist.finance.data.model.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
 @Database(
@@ -56,6 +57,31 @@ abstract class AppDatabase : RoomDatabase() {
                 INSTANCE?.let { database ->
                     scope.launch(Dispatchers.IO) {
                         populateInitialData(database)
+                    }
+                }
+            }
+
+            override fun onDestructiveMigration(db: SupportSQLiteDatabase) {
+                super.onDestructiveMigration(db)
+                INSTANCE?.let { database ->
+                    scope.launch(Dispatchers.IO) {
+                        populateInitialData(database)
+                    }
+                }
+            }
+
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                super.onOpen(db)
+                INSTANCE?.let { database ->
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            val books = database.bookDao().getAllActiveBooks().firstOrNull()
+                            if (books.isNullOrEmpty()) {
+                                populateInitialData(database)
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                     }
                 }
             }

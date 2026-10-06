@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -61,6 +63,7 @@ fun RecordScreen(
     val tag by viewModel.selectedTag.collectAsState()
 
     var showAccountSheet by remember { mutableStateOf(false) }
+    val accountSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showTagDialog by remember { mutableStateOf(false) }
 
     // 系统相册选择器
@@ -341,101 +344,191 @@ fun RecordScreen(
         )
     }
 
-    // 底部账户选择面板 (1:1 对照截图四组账户)
+    // 底部账户选择面板 (1:1 对照截图四组账户，极限 120Hz 顺滑调优)
     if (showAccountSheet) {
         ModalBottomSheet(
             onDismissRequest = { showAccountSheet = false },
-            containerColor = if (isDark) DarkSurface else LightSurface
+            sheetState = accountSheetState,
+            containerColor = if (isDark) DarkSurface else LightSurface,
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            windowInsets = WindowInsets(0, 0, 0, 0)
         ) {
             AccountSelectorContent(
+                selectedAccount = accountName,
                 isDark = isDark,
                 onSelect = { acc ->
                     viewModel.selectedAccountName.value = acc
                     showAccountSheet = false
-                }
+                },
+                onClose = { showAccountSheet = false }
             )
         }
     }
 }
 
-// 账户选择器列表 (严格对照截图四组：资金账户、信用卡账户、充值账户、投资理财账户)
+// 预先静态构建账户四级分组数据，避免任何运行时内存分配与 chunked 计算，保障 120Hz 极限流畅
+private val ACCOUNT_FUNDS = listOf("微信", "支付宝", "银行卡", "现金", "微信零钱通", "余额宝", "余利宝", "小荷包", "云闪付", "公积金", "QQ 钱包", "京东金融", "医保", "数字人民币", "华为钱包", "多多钱包", "Paypal", "其它")
+private val ACCOUNT_CREDITS = listOf("信用卡", "花呗", "借呗", "京东白条", "美团月付", "抖音月付", "微信分付", "其它信用卡")
+private val ACCOUNT_TOPUPS = listOf("话费", "水电", "饭卡", "押金", "公交卡", "会员卡", "加油卡", "石化钱包", "Apple", "其它充值卡")
+private val ACCOUNT_INVESTMENTS = listOf("股票", "基金", "黄金", "外汇", "期货", "债券", "固定收益", "加密货币", "其它理财")
+
+private val ACCOUNT_FUNDS_ROWS = ACCOUNT_FUNDS.chunked(4)
+private val ACCOUNT_CREDITS_ROWS = ACCOUNT_CREDITS.chunked(4)
+private val ACCOUNT_TOPUPS_ROWS = ACCOUNT_TOPUPS.chunked(4)
+private val ACCOUNT_INVESTMENTS_ROWS = ACCOUNT_INVESTMENTS.chunked(4)
+
 @Composable
 private fun AccountSelectorContent(
+    selectedAccount: String,
     isDark: Boolean,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    onClose: () -> Unit
 ) {
     val textColor = if (isDark) DarkTextPrimary else LightTextPrimary
     val textSecondary = if (isDark) DarkTextSecondary else LightTextSecondary
+    val scrollState = rememberScrollState()
 
-    val funds = listOf("微信", "支付宝", "银行卡", "现金", "微信零钱通", "余额宝", "余利宝", "小荷包", "云闪付", "公积金", "QQ 钱包", "京东金融", "医保", "数字人民币", "华为钱包", "多多钱包", "Paypal", "其它")
-    val credits = listOf("信用卡", "花呗", "借呗", "京东白条", "美团月付", "抖音月付", "微信分付", "其它信用卡")
-    val topUps = listOf("话费", "水电", "饭卡", "押金", "公交卡", "会员卡", "加油卡", "石化钱包", "Apple", "其它充值卡")
-    val investments = listOf("股票", "基金", "黄金", "外汇", "期货", "债券", "固定收益", "加密货币", "其它理财")
-
-    LazyColumn(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .fillMaxHeight(0.78f)
     ) {
-        item {
-            Text(text = "选择记账账户", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = textColor)
+        // 顶部固定标题栏：标题 + 当前选择提示 + 关闭按钮
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "选择记账账户",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textColor
+                )
+                Text(
+                    text = "当前选中：$selectedAccount",
+                    fontSize = 12.sp,
+                    color = BlueAccent
+                )
+            }
+            IconButton(onClick = onClose) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "关闭",
+                    tint = textSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
 
-        // 资金账户
-        item {
-            AccountGroupSection(title = "资金账户", items = funds, textColor = textColor, isDark = isDark, onSelect = onSelect)
-        }
+        HorizontalDivider(
+            color = if (isDark) DarkBorder else LightBorder,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+        )
 
-        // 信用卡账户
-        item {
-            AccountGroupSection(title = "信用卡账户", items = credits, textColor = textColor, isDark = isDark, onSelect = onSelect)
-        }
+        // 丝滑滚动内容区域：预先测量，0 重组，120Hz 极限顺滑
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            AccountGroupSection(
+                title = "资金账户",
+                rows = ACCOUNT_FUNDS_ROWS,
+                selectedAccount = selectedAccount,
+                textColor = textColor,
+                isDark = isDark,
+                onSelect = onSelect
+            )
 
-        // 充值账户
-        item {
-            AccountGroupSection(title = "充值账户", items = topUps, textColor = textColor, isDark = isDark, onSelect = onSelect)
-        }
+            AccountGroupSection(
+                title = "信用卡账户",
+                rows = ACCOUNT_CREDITS_ROWS,
+                selectedAccount = selectedAccount,
+                textColor = textColor,
+                isDark = isDark,
+                onSelect = onSelect
+            )
 
-        // 投资理财账户
-        item {
-            AccountGroupSection(title = "投资理财账户", items = investments, textColor = textColor, isDark = isDark, onSelect = onSelect)
-        }
+            AccountGroupSection(
+                title = "充值账户",
+                rows = ACCOUNT_TOPUPS_ROWS,
+                selectedAccount = selectedAccount,
+                textColor = textColor,
+                isDark = isDark,
+                onSelect = onSelect
+            )
 
-        item { Spacer(modifier = Modifier.height(30.dp)) }
+            AccountGroupSection(
+                title = "投资理财账户",
+                rows = ACCOUNT_INVESTMENTS_ROWS,
+                selectedAccount = selectedAccount,
+                textColor = textColor,
+                isDark = isDark,
+                onSelect = onSelect
+            )
+
+            Spacer(modifier = Modifier.height(36.dp))
+        }
     }
 }
 
 @Composable
 private fun AccountGroupSection(
     title: String,
-    items: List<String>,
+    rows: List<List<String>>,
+    selectedAccount: String,
     textColor: Color,
     isDark: Boolean,
     onSelect: (String) -> Unit
 ) {
     val cardBg = if (isDark) DarkSurfaceCard else LightSurfaceCard
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = BlueAccent)
-        Spacer(modifier = Modifier.height(10.dp))
-        val rows = items.chunked(4)
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = BlueAccent,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             rows.forEach { rowItems ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     rowItems.forEach { name ->
+                        val isSelected = (name == selectedAccount)
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(cardBg)
-                                .clickable { onSelect(name) }
-                                .padding(vertical = 11.dp),
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (isSelected) BlueAccent.copy(alpha = 0.18f) else cardBg
+                                )
+                                .border(
+                                    width = if (isSelected) 1.5.dp else 0.dp,
+                                    color = if (isSelected) BlueAccent else Color.Transparent,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable { onSelect(name) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(text = name, fontSize = 12.sp, maxLines = 1, color = textColor)
+                            Text(
+                                text = name,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                maxLines = 1,
+                                color = if (isSelected) BlueAccent else textColor
+                            )
                         }
                     }
                     val remaining = 4 - rowItems.size
