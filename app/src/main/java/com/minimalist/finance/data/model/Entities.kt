@@ -78,7 +78,8 @@ data class Record(
     val amount: Double,                    // 交易金额
     val categoryId: Long? = null,          // 分类ID
     val categoryName: String = "",         // 分类名称
-    val accountId: Long? = null,           // 扣款/入账账户
+    val accountName: String = "微信",      // 账户名称 (微信、支付宝、银行卡、现金等)
+    val accountId: Long? = null,           // 扣款/入账账户ID
     val remark: String = "",               // 备注
     val tag: String = "",                  // 标签
     val timestamp: Long = System.currentTimeMillis()

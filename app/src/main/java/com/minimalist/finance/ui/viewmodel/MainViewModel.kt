@@ -46,8 +46,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var selectedCategoryId = MutableStateFlow<Long?>(null)
     var selectedCategoryName = MutableStateFlow<String>("")
 
-    // 动态选中的扣款账户 (默认微信或支付宝)
-    var selectedAccountName = MutableStateFlow<String>("微信零钱")
+    // 动态选中的扣款账户 (默认微信)
+    var selectedAccountName = MutableStateFlow<String>("微信")
 
     // 动态选中的记账时间戳 (默认此时此刻真实手机时间)
     var selectedTimestamp = MutableStateFlow<Long>(System.currentTimeMillis())
@@ -152,6 +152,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 amount = amount,
                 categoryId = selectedCategoryId.value,
                 categoryName = selectedCategoryName.value,
+                accountName = selectedAccountName.value,
                 remark = remarkText.value,
                 tag = selectedTag.value,
                 timestamp = selectedTimestamp.value
@@ -162,6 +163,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             selectedImageUri.value = null
             selectedTimestamp.value = System.currentTimeMillis() // 重置为最新时间
             onSuccess()
+        }
+    }
+
+    // 资产账户增删
+    fun addAccount(name: String, initialBalance: Double = 0.0, currency: String = "CNY") {
+        viewModelScope.launch {
+            accountDao.insertAccount(Account(name = name, balance = initialBalance, currency = currency))
+        }
+    }
+
+    fun deleteAccount(account: Account) {
+        viewModelScope.launch {
+            accountDao.deleteAccount(account)
         }
     }
 

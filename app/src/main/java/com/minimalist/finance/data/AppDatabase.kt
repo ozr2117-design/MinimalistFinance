@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
         PeriodicRule::class,
         InstallmentPlan::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -148,12 +148,11 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 db.categoryDao().insertCategories(c4Expense + c4Income)
 
-                // 3. 基础资金账户 (纯净初始余额全部为 0)
-                db.accountDao().insertAccount(Account(name = "微信零钱", balance = 0.0))
-                db.accountDao().insertAccount(Account(name = "支付宝余额", balance = 0.0))
-                db.accountDao().insertAccount(Account(name = "招商银行储蓄卡", balance = 0.0))
-                db.accountDao().insertAccount(Account(name = "证券账户 (A股/基金)", balance = 0.0))
-                db.accountDao().insertAccount(Account(name = "海外证券账户 (USD)", balance = 0.0, currency = "USD"))
+                // 3. 基础通用资金账户 (纯净初始余额全部为 0)
+                db.accountDao().insertAccount(Account(name = "微信", balance = 0.0))
+                db.accountDao().insertAccount(Account(name = "支付宝", balance = 0.0))
+                db.accountDao().insertAccount(Account(name = "银行卡", balance = 0.0))
+                db.accountDao().insertAccount(Account(name = "现金", balance = 0.0))
             }
         }
     }

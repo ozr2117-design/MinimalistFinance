@@ -367,7 +367,7 @@ private fun AccountSelectorContent(
     val textColor = if (isDark) DarkTextPrimary else LightTextPrimary
     val textSecondary = if (isDark) DarkTextSecondary else LightTextSecondary
 
-    val funds = listOf("现金", "微信", "微信零钱通", "支付宝", "余额宝", "余利宝", "小荷包", "云闪付", "银行卡", "公积金", "QQ 钱包", "京东金融", "医保", "数字人民币", "华为钱包", "多多钱包", "Paypal", "其它")
+    val funds = listOf("微信", "支付宝", "银行卡", "现金", "微信零钱通", "余额宝", "余利宝", "小荷包", "云闪付", "公积金", "QQ 钱包", "京东金融", "医保", "数字人民币", "华为钱包", "多多钱包", "Paypal", "其它")
     val credits = listOf("信用卡", "花呗", "借呗", "京东白条", "美团月付", "抖音月付", "微信分付", "其它信用卡")
     val topUps = listOf("话费", "水电", "饭卡", "押金", "公交卡", "会员卡", "加油卡", "石化钱包", "Apple", "其它充值卡")
     val investments = listOf("股票", "基金", "黄金", "外汇", "期货", "债券", "固定收益", "加密货币", "其它理财")
@@ -415,25 +415,33 @@ private fun AccountGroupSection(
     onSelect: (String) -> Unit
 ) {
     val cardBg = if (isDark) DarkSurfaceCard else LightSurfaceCard
-    Column {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = BlueAccent)
         Spacer(modifier = Modifier.height(10.dp))
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(4),
-            modifier = Modifier.heightIn(max = 240.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(items) { name ->
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(cardBg)
-                        .clickable { onSelect(name) }
-                        .padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center
+        val rows = items.chunked(4)
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            rows.forEach { rowItems ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(text = name, fontSize = 12.sp, maxLines = 1, color = textColor)
+                    rowItems.forEach { name ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(cardBg)
+                                .clickable { onSelect(name) }
+                                .padding(vertical = 11.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = name, fontSize = 12.sp, maxLines = 1, color = textColor)
+                        }
+                    }
+                    val remaining = 4 - rowItems.size
+                    repeat(remaining) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
                 }
             }
         }
