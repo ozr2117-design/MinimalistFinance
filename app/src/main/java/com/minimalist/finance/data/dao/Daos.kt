@@ -80,6 +80,9 @@ interface RecordDao {
 
     @Query("SELECT SUM(amount) FROM records WHERE bookId = :bookId AND type = 'INCOME'")
     fun getBookIncome(bookId: Long): Flow<Double?>
+
+    @Query("SELECT COUNT(*) FROM records WHERE amount = :amount AND timestamp >= :sinceTimestamp")
+    suspend fun getRecentDuplicateCount(amount: Double, sinceTimestamp: Long): Int
 }
 
 @Dao
