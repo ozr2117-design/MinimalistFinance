@@ -2,6 +2,7 @@ package com.minimalist.finance.data
 
 import android.content.Context
 import androidx.room.*
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.minimalist.finance.data.dao.*
 import com.minimalist.finance.data.model.*
@@ -9,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 @Database(
     entities = [
@@ -19,7 +21,7 @@ import kotlinx.coroutines.launch
         PeriodicRule::class,
         InstallmentPlan::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -34,6 +36,24 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. 去重分类表，同 (bookId, name, type) 仅保留最小 ID 的一条
+                db.execSQL("DELETE FROM categories WHERE id NOT IN (SELECT MIN(id) FROM categories GROUP BY bookId, name, type)")
+                // 2. 为 categories 创建唯一索引，彻底杜绝重复图标
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_categories_bookId_name_type` ON `categories` (`bookId`, `name`, `type`)")
+
+                // 3. 将同名账户的余额统一提升为最高值（保留用户填写的本金）
+                db.execSQL("UPDATE accounts SET balance = (SELECT MAX(a2.balance) FROM accounts a2 WHERE a2.name = accounts.name)")
+                // 4. 去重账户表，同名账户仅保留一条
+                db.execSQL("DELETE FROM accounts WHERE id NOT IN (SELECT MIN(id) FROM accounts GROUP BY name)")
+                // 5. 移除默认现金账户 (若余额为 0)
+                db.execSQL("DELETE FROM accounts WHERE name = '现金' AND balance = 0.0")
+                // 6. 为 accounts 创建唯一索引
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_accounts_name` ON `accounts` (`name`)")
+            }
+        }
+
         fun getDatabase(context: Context, scope: CoroutineScope): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -41,6 +61,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "minimalist_finance.db"
                 )
+                    .addMigrations(MIGRATION_3_4)
                     .fallbackToDestructiveMigration()
                     .addCallback(DatabaseCallback(scope))
                     .build()
@@ -52,6 +73,8 @@ abstract class AppDatabase : RoomDatabase() {
         private class DatabaseCallback(
             private val scope: CoroutineScope
         ) : RoomDatabase.Callback() {
+            private val isPopulating = AtomicBoolean(false)
+
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)
                 INSTANCE?.let { database ->
@@ -72,6 +95,19 @@ abstract class AppDatabase : RoomDatabase() {
 
             override fun onOpen(db: SupportSQLiteDatabase) {
                 super.onOpen(db)
+                // 每次数据库打开时，立即在底层执行幂等清理：
+                // 1) 彻底删除可能因历史并发产生的重复分类（保留最小 ID）
+                // 2) 彻底删除重复账户并保留最大余额
+                // 3) 清理余额为 0 的现金账户（默认仅保留微信、支付宝、银行卡）
+                try {
+                    db.execSQL("DELETE FROM categories WHERE id NOT IN (SELECT MIN(id) FROM categories GROUP BY bookId, name, type)")
+                    db.execSQL("UPDATE accounts SET balance = (SELECT MAX(a2.balance) FROM accounts a2 WHERE a2.name = accounts.name)")
+                    db.execSQL("DELETE FROM accounts WHERE id NOT IN (SELECT MIN(id) FROM accounts GROUP BY name)")
+                    db.execSQL("DELETE FROM accounts WHERE name = '现金' AND balance = 0.0")
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+
                 INSTANCE?.let { database ->
                     scope.launch(Dispatchers.IO) {
                         try {
@@ -87,10 +123,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
 
             suspend fun populateInitialData(db: AppDatabase) {
-                // 1. 初始化四大核心账本 (ID 分别为 1, 2, 3, 4)
-                val b1 = db.bookDao().insertBook(
-                    Book(id = 1, name = "日常消费账本", subtitle = "默认主账本", type = BookType.DAILY, currency = "CNY", isDefault = true)
-                )
+                if (!isPopulating.compareAndSet(false, true)) return
+                try {
+                    val count = db.bookDao().getAllActiveBooks().firstOrNull()?.size ?: 0
+                    if (count > 0) return
+                    // 1. 初始化四大核心账本 (ID 分别为 1, 2, 3, 4)
+                    val b1 = db.bookDao().insertBook(
+                        Book(id = 1, name = "日常消费账本", subtitle = "默认主账本", type = BookType.DAILY, currency = "CNY", isDefault = true)
+                    )
                 val b2 = db.bookDao().insertBook(
                     Book(id = 2, name = "境内投资账本", subtitle = "A股 · 基金 · 固收", type = BookType.DOMESTIC_INVEST, currency = "CNY")
                 )
@@ -174,12 +214,14 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 db.categoryDao().insertCategories(c4Expense + c4Income)
 
-                // 3. 基础通用资金账户 (纯净初始余额全部为 0)
+                // 3. 基础通用资金账户 (默认只保留微信、支付宝、银行卡三大主流账户，余下由用户自主添加)
                 db.accountDao().insertAccount(Account(name = "微信", balance = 0.0))
                 db.accountDao().insertAccount(Account(name = "支付宝", balance = 0.0))
                 db.accountDao().insertAccount(Account(name = "银行卡", balance = 0.0))
-                db.accountDao().insertAccount(Account(name = "现金", balance = 0.0))
+            } finally {
+                isPopulating.set(false)
             }
         }
     }
+}
 }

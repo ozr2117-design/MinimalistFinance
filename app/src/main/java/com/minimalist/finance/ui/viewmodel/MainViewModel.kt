@@ -30,17 +30,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val allBooks = bookDao.getAllActiveBooks().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     var currentBookId = MutableStateFlow<Long>(1L)
 
-    // 资产账户流
-    val allAccounts = accountDao.getAllAccounts().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    // 资产账户流 (UI 层强力去重保障)
+    val allAccounts = accountDao.getAllAccounts().map { list ->
+        list.distinctBy { it.name }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     // 当前页面交易类型 (支出 / 收入)
     var currentTransactionType = MutableStateFlow(TransactionType.EXPENSE)
 
-    // 动态根据当前选中的账本与交易类型拉取专属分类！
+    // 动态根据当前选中的账本与交易类型拉取专属分类！(UI 层强力去重保障)
     val currentCategories = combine(currentBookId, currentTransactionType) { bId, type ->
         Pair(bId, type)
     }.flatMapLatest { (bId, type) ->
-        categoryDao.getCategoriesByBookAndType(bId, type)
+        categoryDao.getCategoriesByBookAndType(bId, type).map { list ->
+            list.distinctBy { it.name }
+        }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     var selectedCategoryId = MutableStateFlow<Long?>(null)

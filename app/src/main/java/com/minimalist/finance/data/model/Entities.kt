@@ -1,6 +1,7 @@
 package com.minimalist.finance.data.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
@@ -40,9 +41,14 @@ enum class TransactionType {
 }
 
 /**
- * 分类表 (各账本拥有完全独立的专属分类)
+ * 分类表 (各账本拥有完全独立的专属分类，同账本同类型分类唯一)
  */
-@Entity(tableName = "categories")
+@Entity(
+    tableName = "categories",
+    indices = [
+        Index(value = ["bookId", "name", "type"], unique = true)
+    ]
+)
 data class Category(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -54,9 +60,14 @@ data class Category(
 )
 
 /**
- * 资产账户表
+ * 资产账户表 (账户名称唯一)
  */
-@Entity(tableName = "accounts")
+@Entity(
+    tableName = "accounts",
+    indices = [
+        Index(value = ["name"], unique = true)
+    ]
+)
 data class Account(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
