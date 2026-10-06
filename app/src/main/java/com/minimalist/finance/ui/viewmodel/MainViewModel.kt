@@ -166,10 +166,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 资产账户增删
+    // 资产账户增删改
     fun addAccount(name: String, initialBalance: Double = 0.0, currency: String = "CNY") {
         viewModelScope.launch {
-            accountDao.insertAccount(Account(name = name, balance = initialBalance, currency = currency))
+            val existing = allAccounts.value.firstOrNull { it.name.trim() == name.trim() }
+            if (existing != null) {
+                accountDao.updateAccount(existing.copy(balance = initialBalance))
+            } else {
+                accountDao.insertAccount(Account(name = name.trim(), balance = initialBalance, currency = currency))
+            }
+        }
+    }
+
+    fun updateAccount(account: Account) {
+        viewModelScope.launch {
+            accountDao.updateAccount(account)
+        }
+    }
+
+    fun updateAccountBalance(account: Account, newBalance: Double) {
+        viewModelScope.launch {
+            accountDao.updateAccount(account.copy(balance = newBalance))
         }
     }
 

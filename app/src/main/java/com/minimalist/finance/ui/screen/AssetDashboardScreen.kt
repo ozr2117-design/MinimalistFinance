@@ -46,10 +46,14 @@ fun AssetDashboardScreen(
     val totalExpense by viewModel.totalExpense.collectAsState()
     val totalIncome by viewModel.totalIncome.collectAsState()
 
-    val netAsset = totalIncome - totalExpense
+    val totalInitialBalance = remember(accounts) {
+        accounts.sumOf { it.balance }
+    }
+    val netAsset = totalInitialBalance + (totalIncome - totalExpense)
 
-    // 弹窗状态：添加自定义账户
+    // 弹窗状态：添加自定义账户 / 修改已有账户
     var showAddAccountDialog by remember { mutableStateOf(false) }
+    var editingAccount by remember { mutableStateOf<Account?>(null) }
 
     // 高性能记忆优化：在滚动时绝不在 UI 线程重复过滤遍历 records
     val bookStats = remember(books, records) {
@@ -185,7 +189,7 @@ fun AssetDashboardScreen(
                 }
             }
 
-            // 资金账户列表 (通用主流账户 + 支持自由添加)
+            // 资金账户列表 (通用主流账户 + 支持自由添加与随时修改)
             item {
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
@@ -195,7 +199,7 @@ fun AssetDashboardScreen(
                 ) {
                     Column {
                         Text(text = "常用资金账户余额", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
-                        Text(text = "实时反映各支付渠道的资金收支与结余", fontSize = 11.sp, color = textSecondary)
+                        Text(text = "点击任意账户卡片可快速修改本金或删除多余账户", fontSize = 11.sp, color = textSecondary)
                     }
                     TextButton(onClick = { showAddAccountDialog = true }) {
                         Text("+ 添加账户", color = BlueAccent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -210,26 +214,102 @@ fun AssetDashboardScreen(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
                         .background(cardBg)
+                        .clickable { editingAccount = stat.account }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(imageVector = accIcon, contentDescription = null, tint = BlueAccent, modifier = Modifier.size(20.dp))
+                        Icon(imageVector = accIcon, contentDescription = null, tint = BlueAccent, modifier = Modifier.size(22.dp))
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = stat.account.name, fontSize = 15.sp, color = textColor)
+                        Column {
+                            Text(text = stat.account.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = textColor)
+                            Text(text = "初始本金: ¥ ${String.format(Locale.CHINA, "%.2f", stat.account.balance)}", fontSize = 11.sp, color = textSecondary)
+                        }
                     }
-                    Text(
-                        text = String.format(Locale.CHINA, "%s %.2f", stat.symbol, stat.currentBalance),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (stat.currentBalance < 0) CoralRed else textColor
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = String.format(Locale.CHINA, "%s %.2f", stat.symbol, stat.currentBalance),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (stat.currentBalance < 0) CoralRed else textColor
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(imageVector = Icons.Default.Edit, contentDescription = "编辑余额", tint = textSecondary.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                    }
                 }
             }
 
             item { Spacer(modifier = Modifier.height(24.dp)) }
         }
+    }
+
+    // 修改账户余额与管理弹窗
+    editingAccount?.let { acc ->
+        var editName by remember(acc) { mutableStateOf(acc.name) }
+        var editBalance by remember(acc) {
+            mutableStateOf(if (acc.balance == 0.0) "" else String.format(Locale.CHINA, "%.2f", acc.balance))
+        }
+
+        AlertDialog(
+            onDismissRequest = { editingAccount = null },
+            title = { Text(text = "修改【${acc.name}】余额", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "设置该资金账户的初始本金，系统将自动汇总记账收支计算当前实时余额并计入大盘总资产。",
+                        fontSize = 12.sp,
+                        color = textSecondary
+                    )
+                    OutlinedTextField(
+                        value = editName,
+                        onValueChange = { editName = it },
+                        label = { Text("账户名称") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editBalance,
+                        onValueChange = { editBalance = it },
+                        label = { Text("初始本金 / 余额") },
+                        placeholder = { Text("0.00") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val newBal = editBalance.toDoubleOrNull() ?: 0.0
+                        viewModel.updateAccount(
+                            acc.copy(
+                                name = editName.trim().ifEmpty { acc.name },
+                                balance = newBal
+                            )
+                        )
+                        editingAccount = null
+                    }
+                ) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteAccount(acc)
+                            editingAccount = null
+                        }
+                    ) {
+                        Text("删除账户", color = CoralRed)
+                    }
+                    TextButton(onClick = { editingAccount = null }) {
+                        Text("取消")
+                    }
+                }
+            }
+        )
     }
 
     // 添加自定义账户弹窗
@@ -238,7 +318,7 @@ fun AssetDashboardScreen(
         var newAccBalance by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showAddAccountDialog = false },
-            title = { Text(text = "添加自定义资金账户", fontWeight = FontWeight.Bold) },
+            title = { Text(text = "添加资金账户", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
