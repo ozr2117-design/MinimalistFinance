@@ -78,7 +78,7 @@ fun AboutScreen(
                 }
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(text = "数簿", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textColor)
-                Text(text = "版本 1.0.2 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
+                Text(text = "版本 1.0.3 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
             }
 
             item {
@@ -90,10 +90,9 @@ fun AboutScreen(
                         .padding(18.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(text = "🎯 我们的目标", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
                         Text(
                             text = "「每一笔都有数，过理性的生活」",
-                            fontSize = 16.sp,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = textColor
                         )
