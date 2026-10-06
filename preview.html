@@ -371,6 +371,7 @@
             <div class="drawer-item" onclick="openView('dashboardModal')"><span>📊 资产大盘</span><span style="font-size:12px; color:var(--text-secondary)">¥0.00 ></span></div>
             <div class="drawer-item" onclick="openView('searchModal')"><span>🔍 搜索账单</span><span>></span></div>
             <div class="drawer-item" onclick="openView('periodicModal')"><span>📅 周期 · 分期</span><span style="font-size:12px; color:var(--text-secondary)">房租/分期 ></span></div>
+            <div class="drawer-item" onclick="openView('autoRecordModal')"><span>⚡ 自动记账</span><span style="font-size:12px; color:var(--text-secondary)">微信/支付宝 ></span></div>
             <div class="drawer-item" onclick="openView('backupModal')"><span>📤 数据备份导出</span><span>></span></div>
             <div class="drawer-item" onclick="toggleTheme()"><span>🌓 主题外观切换</span><span style="font-size:12px; color:var(--text-secondary)">黑/白一键切</span></div>
 
@@ -435,6 +436,38 @@
         <div style="background:var(--card-color); padding:16px; border-radius:16px; margin-bottom:12px; color:var(--text-primary);">
             <h4>💻 信用卡分期管理</h4>
             <p style="color:var(--text-secondary); font-size:12px; margin-top:4px;">支持添加分期还款计划与自动提醒</p>
+        </div>
+    </div>
+
+    <!-- 自动记账模态 -->
+    <div class="modal-view" id="autoRecordModal">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+            <div class="icon-btn" onclick="closeView('autoRecordModal')">← 返回</div>
+            <h2 style="font-size:18px; color:var(--text-primary)">无障碍自动记账</h2>
+        </div>
+        <div style="background:var(--card-color); padding:16px; border-radius:16px; margin-bottom:12px; color:var(--text-primary); display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <h4>⚡ 无感自动记账总开关</h4>
+                <p style="color:var(--text-secondary); font-size:12px; margin-top:2px;">微信/支付宝付款成功后自动记账</p>
+            </div>
+            <span style="color:var(--mint-green); font-weight:bold;">已开启 ✔</span>
+        </div>
+        <div style="background:var(--card-color); padding:16px; border-radius:16px; margin-bottom:12px; color:var(--text-primary);">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                <span>1. 无障碍服务权限 (必须)</span><span style="color:var(--mint-green)">已开启 ✔</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                <span>2. 悬浮窗权限 (推荐)</span><span style="color:var(--mint-green)">已开启 ✔</span>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>3. 忽略电池优化 (防误杀)</span><span style="color:var(--mint-green)">已设置 ✔</span>
+            </div>
+        </div>
+        <div style="background:var(--card-color); padding:16px; border-radius:16px; margin-bottom:12px; color:var(--text-primary);">
+            <h4 style="color:#3b82f6; margin-bottom:8px;">🧪 模拟支付测试 (验证自动化)</h4>
+            <p style="color:var(--text-secondary); font-size:12px; margin-bottom:12px;">无需真花钱，点击立即模拟真实账单入库：</p>
+            <button style="width:100%; padding:10px; border-radius:8px; border:1px solid #3b82f6; background:transparent; color:#3b82f6; margin-bottom:8px; cursor:pointer;" onclick="alert('⚡ 模拟成功: 微信支付 ¥18.50 (麦当劳) 已自动记入日常账本 [食]！')">🍔 模拟微信付款 ¥18.50 (麦当劳) -> [食]</button>
+            <button style="width:100%; padding:10px; border-radius:8px; border:1px solid #3b82f6; background:transparent; color:#3b82f6; cursor:pointer;" onclick="alert('⚡ 模拟成功: 支付宝付款 ¥26.00 (滴滴打车) 已自动记入日常账本 [行]！')">🚖 模拟支付宝付款 ¥26.00 (滴滴打车) -> [行]</button>
         </div>
     </div>
 

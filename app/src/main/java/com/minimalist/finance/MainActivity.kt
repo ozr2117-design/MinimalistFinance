@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToDashboard = { navController.navigate("dashboard") },
                                 onNavigateToSearch = { navController.navigate("search") },
                                 onNavigateToPeriodic = { navController.navigate("periodic") },
+                                onNavigateToAutoRecord = { navController.navigate("auto_record") },
                                 onNavigateToBackup = { navController.navigate("backup") },
                                 onNavigateToAbout = { navController.navigate("about") },
                                 onCloseDrawer = { scope.launch { drawerState.close() } }
@@ -78,6 +79,12 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("periodic") {
                             PeriodicScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("auto_record") {
+                            AutoRecordScreen(
                                 viewModel = viewModel,
                                 onBack = { navController.popBackStack() }
                             )

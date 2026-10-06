@@ -27,6 +27,7 @@ fun DrawerMenu(
     onNavigateToDashboard: () -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToPeriodic: () -> Unit,
+    onNavigateToAutoRecord: () -> Unit,
     onNavigateToBackup: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onCloseDrawer: () -> Unit,
@@ -133,6 +134,18 @@ fun DrawerMenu(
                 onClick = {
                     onCloseDrawer()
                     onNavigateToPeriodic()
+                }
+            )
+
+            DrawerMenuItem(
+                icon = Icons.Default.Bolt,
+                title = "自动记账",
+                subtitle = "微信/支付宝无感",
+                textColor = textColor,
+                textSecondary = textSecondary,
+                onClick = {
+                    onCloseDrawer()
+                    onNavigateToAutoRecord()
                 }
             )
 
