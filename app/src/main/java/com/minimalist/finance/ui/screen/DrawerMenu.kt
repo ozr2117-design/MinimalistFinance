@@ -91,13 +91,11 @@ fun DrawerMenu(
 
             HorizontalDivider(color = if (isDark) DarkBorder else LightBorder)
 
-            // 菜单列表
+            // 菜单列表 (极简纯粹，去除右侧杂乱小字)
             DrawerMenuItem(
                 icon = Icons.Default.Book,
                 title = "我的账本",
-                subtitle = currentBookName,
                 textColor = textColor,
-                textSecondary = textSecondary,
                 onClick = {
                     onCloseDrawer()
                     onNavigateToBooks()
@@ -108,7 +106,6 @@ fun DrawerMenu(
                 icon = Icons.Default.BarChart,
                 title = "资产大盘",
                 textColor = textColor,
-                textSecondary = textSecondary,
                 onClick = {
                     onCloseDrawer()
                     onNavigateToDashboard()
@@ -119,7 +116,6 @@ fun DrawerMenu(
                 icon = Icons.Default.Search,
                 title = "搜索账单",
                 textColor = textColor,
-                textSecondary = textSecondary,
                 onClick = {
                     onCloseDrawer()
                     onNavigateToSearch()
@@ -130,7 +126,6 @@ fun DrawerMenu(
                 icon = Icons.Default.EventRepeat,
                 title = "周期 · 分期",
                 textColor = textColor,
-                textSecondary = textSecondary,
                 onClick = {
                     onCloseDrawer()
                     onNavigateToPeriodic()
@@ -140,9 +135,7 @@ fun DrawerMenu(
             DrawerMenuItem(
                 icon = Icons.Default.Bolt,
                 title = "自动记账",
-                subtitle = "微信/支付宝无感",
                 textColor = textColor,
-                textSecondary = textSecondary,
                 onClick = {
                     onCloseDrawer()
                     onNavigateToAutoRecord()
@@ -152,9 +145,7 @@ fun DrawerMenu(
             DrawerMenuItem(
                 icon = Icons.Default.Sync,
                 title = "数据备份与导入",
-                subtitle = "换机迁移 · 导出恢复",
                 textColor = textColor,
-                textSecondary = textSecondary,
                 onClick = {
                     onCloseDrawer()
                     onNavigateToBackup()
@@ -164,13 +155,7 @@ fun DrawerMenu(
             DrawerMenuItem(
                 icon = Icons.Default.Palette,
                 title = "主题外观",
-                subtitle = when (themeMode) {
-                    ThemeMode.DARK -> "夜间纯黑"
-                    ThemeMode.LIGHT -> "日间极简"
-                    ThemeMode.SYSTEM -> "跟随系统"
-                },
                 textColor = textColor,
-                textSecondary = textSecondary,
                 onClick = { showThemeDialog = true }
             )
         }
@@ -239,31 +224,19 @@ private fun ThemeOptionRow(title: String, isSelected: Boolean, onSelect: () -> U
 private fun DrawerMenuItem(
     icon: ImageVector,
     title: String,
-    subtitle: String? = null,
     textColor: Color,
-    textSecondary: Color,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
             .clickable { onClick() }
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            .padding(vertical = 11.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(imageVector = icon, contentDescription = title, tint = textColor, modifier = Modifier.size(22.dp))
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(text = title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = textColor)
-        }
-
-        if (subtitle != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = subtitle, fontSize = 12.sp, color = textSecondary)
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(imageVector = Icons.Default.KeyboardArrowRight, contentDescription = null, tint = textSecondary, modifier = Modifier.size(16.dp))
-            }
-        }
+        Icon(imageVector = icon, contentDescription = title, tint = textColor, modifier = Modifier.size(22.dp))
+        Spacer(modifier = Modifier.width(18.dp))
+        Text(text = title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = textColor)
     }
 }

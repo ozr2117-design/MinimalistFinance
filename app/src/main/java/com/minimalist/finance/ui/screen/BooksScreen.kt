@@ -199,15 +199,5 @@ private fun BookCardItem(
                 color = Color.White.copy(alpha = 0.85f)
             )
         }
-
-        // 右下角三点操作图标
-        Icon(
-            imageVector = Icons.Default.MoreHoriz,
-            contentDescription = "更多操作",
-            tint = Color.White.copy(alpha = 0.8f),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .size(22.dp)
-        )
     }
 }
