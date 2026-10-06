@@ -55,6 +55,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // 动态选中的记账时间戳 (默认此时此刻真实手机时间)
     var selectedTimestamp = MutableStateFlow<Long>(System.currentTimeMillis())
+    // 标记用户是否手动指定了过去/特殊时间 (若为 false，切回前台时自动更新为实时系统时间)
+    var isCustomTimestamp = MutableStateFlow(false)
+
+    fun syncCurrentTimeIfAuto() {
+        if (!isCustomTimestamp.value) {
+            selectedTimestamp.value = System.currentTimeMillis()
+        }
+    }
 
     // 动态选中的小票图片
     var selectedImageUri = MutableStateFlow<Uri?>(null)
@@ -205,6 +213,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             remarkText.value = ""
             selectedImageUri.value = null
             selectedTimestamp.value = System.currentTimeMillis() // 重置为最新时间
+            isCustomTimestamp.value = false
             onSuccess()
         }
     }

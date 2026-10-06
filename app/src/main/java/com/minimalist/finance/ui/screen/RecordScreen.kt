@@ -32,6 +32,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.minimalist.finance.data.model.Category
 import com.minimalist.finance.data.model.TransactionType
 import com.minimalist.finance.ui.component.CustomKeypad
@@ -62,6 +64,7 @@ fun RecordScreen(
     // 胶囊状态
     val accountName by viewModel.selectedAccountName.collectAsState()
     val timestamp by viewModel.selectedTimestamp.collectAsState()
+    val isCustomTime by viewModel.isCustomTimestamp.collectAsState()
     val imageUri by viewModel.selectedImageUri.collectAsState()
     val tag by viewModel.selectedTag.collectAsState()
 
@@ -69,6 +72,25 @@ fun RecordScreen(
     val accountSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showTagDialog by remember { mutableStateOf(false) }
     var showRemarkDialog by remember { mutableStateOf(false) }
+    var showTimeDialog by remember { mutableStateOf(false) }
+
+    // 监听应用从后台切回前台：若未手动锁死往期时间，自动秒级同步至手机当前最新真实时间！
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.syncCurrentTimeIfAuto()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.syncCurrentTimeIfAuto()
+    }
 
     // 系统相册选择器
     val imagePicker = rememberLauncherForActivityResult(
@@ -79,8 +101,8 @@ fun RecordScreen(
         }
     }
 
-    // 动态格式化时间为手机当前时间
-    val dateDisplay = remember(timestamp) {
+    // 动态格式化时间为手机当前时间 (精准支持“今天”、“昨天”或具体日期)
+    val dateDisplay = remember(timestamp, isCustomTime) {
         val now = Calendar.getInstance()
         val target = Calendar.getInstance().apply { timeInMillis = timestamp }
         val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
@@ -88,7 +110,13 @@ fun RecordScreen(
             now.get(Calendar.DAY_OF_YEAR) == target.get(Calendar.DAY_OF_YEAR)) {
             "今天 $timeFormat"
         } else {
-            SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(timestamp))
+            val yest = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+            if (yest.get(Calendar.YEAR) == target.get(Calendar.YEAR) &&
+                yest.get(Calendar.DAY_OF_YEAR) == target.get(Calendar.DAY_OF_YEAR)) {
+                "昨天 $timeFormat"
+            } else {
+                SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(timestamp))
+            }
         }
     }
 
@@ -279,36 +307,12 @@ fun RecordScreen(
                         onClick = { showAccountSheet = true }
                     )
 
-                    // 2. 时间选择 (动态同步系统时间，支持弹出 DatePicker 补记往期)
+                    // 2. 时间选择 (动态同步系统时间，支持类似钱迹的快捷日期与精确时分调节)
                     ClickablePill(
                         label = dateDisplay,
-                        isActive = false,
+                        isActive = isCustomTime,
                         isDark = isDark,
-                        onClick = {
-                            val c = Calendar.getInstance().apply { timeInMillis = timestamp }
-                            DatePickerDialog(
-                                context,
-                                { _, year, month, dayOfMonth ->
-                                    val newCal = Calendar.getInstance().apply {
-                                        set(year, month, dayOfMonth)
-                                    }
-                                    TimePickerDialog(
-                                        context,
-                                        { _, hourOfDay, minute ->
-                                            newCal.set(Calendar.HOUR_OF_DAY, hourOfDay)
-                                            newCal.set(Calendar.MINUTE, minute)
-                                            viewModel.selectedTimestamp.value = newCal.timeInMillis
-                                        },
-                                        c.get(Calendar.HOUR_OF_DAY),
-                                        c.get(Calendar.MINUTE),
-                                        true
-                                    ).show()
-                                },
-                                c.get(Calendar.YEAR),
-                                c.get(Calendar.MONTH),
-                                c.get(Calendar.DAY_OF_MONTH)
-                            ).show()
-                        }
+                        onClick = { showTimeDialog = true }
                     )
 
                     // 3. 图片功能 (选择相册小票/账单，彻底免费无 VIP 限制)
@@ -453,6 +457,230 @@ fun RecordScreen(
                         TextButton(onClick = { tempRemark = "" }) { Text("清空") }
                     }
                     TextButton(onClick = { showRemarkDialog = false }) { Text("取消") }
+                }
+            }
+        )
+    }
+
+    // 钱迹风格：高精度时间选择器 (支持今/昨/前快捷切换、日历挑选与精确时分调节)
+    if (showTimeDialog) {
+        var tempCal by remember {
+            mutableStateOf(Calendar.getInstance().apply { timeInMillis = timestamp })
+        }
+        val isToday = remember(tempCal.timeInMillis) {
+            val now = Calendar.getInstance()
+            now.get(Calendar.YEAR) == tempCal.get(Calendar.YEAR) &&
+            now.get(Calendar.DAY_OF_YEAR) == tempCal.get(Calendar.DAY_OF_YEAR)
+        }
+        val isYesterday = remember(tempCal.timeInMillis) {
+            val yest = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+            yest.get(Calendar.YEAR) == tempCal.get(Calendar.YEAR) &&
+            yest.get(Calendar.DAY_OF_YEAR) == tempCal.get(Calendar.DAY_OF_YEAR)
+        }
+        val isBeforeYesterday = remember(tempCal.timeInMillis) {
+            val before = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -2) }
+            before.get(Calendar.YEAR) == tempCal.get(Calendar.YEAR) &&
+            before.get(Calendar.DAY_OF_YEAR) == tempCal.get(Calendar.DAY_OF_YEAR)
+        }
+
+        val dateText = SimpleDateFormat("yyyy年MM月dd日 EEEE", Locale.CHINA).format(tempCal.time)
+        val timeText = SimpleDateFormat("HH:mm", Locale.getDefault()).format(tempCal.time)
+
+        AlertDialog(
+            onDismissRequest = { showTimeDialog = false },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "调整记账时间",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isToday) MintGreen.copy(alpha = 0.15f) else BlueAccent.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = if (isToday) "今天" else (if (isYesterday) "昨天" else (if (isBeforeYesterday) "前天" else "往期补记")),
+                            fontSize = 12.sp,
+                            color = if (isToday) MintGreen else BlueAccent,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // 大字日期与时分预览卡片
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (isDark) DarkSurface else Color(0xFFF1F5F9))
+                            .padding(14.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = dateText,
+                                fontSize = 13.sp,
+                                color = textSecondary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = timeText,
+                                fontSize = 30.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textColor
+                            )
+                        }
+                    }
+
+                    // 快捷日期切换栏 (类似钱迹: 今 / 昨 / 前 / 日历)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(text = "快捷日期选择：", fontSize = 12.sp, color = textSecondary)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterPillButton(
+                                label = "今 (实时)",
+                                isSelected = isToday,
+                                activeColor = MintGreen,
+                                isDark = isDark,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                tempCal = Calendar.getInstance()
+                            }
+
+                            FilterPillButton(
+                                label = "昨天",
+                                isSelected = isYesterday,
+                                activeColor = BlueAccent,
+                                isDark = isDark,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                val c = Calendar.getInstance().apply {
+                                    add(Calendar.DAY_OF_YEAR, -1)
+                                    set(Calendar.HOUR_OF_DAY, tempCal.get(Calendar.HOUR_OF_DAY))
+                                    set(Calendar.MINUTE, tempCal.get(Calendar.MINUTE))
+                                }
+                                tempCal = c
+                            }
+
+                            FilterPillButton(
+                                label = "前天",
+                                isSelected = isBeforeYesterday,
+                                activeColor = BlueAccent,
+                                isDark = isDark,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                val c = Calendar.getInstance().apply {
+                                    add(Calendar.DAY_OF_YEAR, -2)
+                                    set(Calendar.HOUR_OF_DAY, tempCal.get(Calendar.HOUR_OF_DAY))
+                                    set(Calendar.MINUTE, tempCal.get(Calendar.MINUTE))
+                                }
+                                tempCal = c
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    DatePickerDialog(
+                                        context,
+                                        { _, y, m, d ->
+                                            val c = Calendar.getInstance().apply {
+                                                timeInMillis = tempCal.timeInMillis
+                                                set(Calendar.YEAR, y)
+                                                set(Calendar.MONTH, m)
+                                                set(Calendar.DAY_OF_MONTH, d)
+                                            }
+                                            tempCal = c
+                                        },
+                                        tempCal.get(Calendar.YEAR),
+                                        tempCal.get(Calendar.MONTH),
+                                        tempCal.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isDark) DarkSurface else Color(0xFFF1F5F9))
+                            ) {
+                                Icon(Icons.Default.CalendarMonth, contentDescription = "自选日期", tint = textSecondary, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+
+                    // 具体时分调节
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(text = "具体时间调整 (时:分)：", fontSize = 12.sp, color = textSecondary)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    TimePickerDialog(
+                                        context,
+                                        { _, hourOfDay, minute ->
+                                            val c = Calendar.getInstance().apply {
+                                                timeInMillis = tempCal.timeInMillis
+                                                set(Calendar.HOUR_OF_DAY, hourOfDay)
+                                                set(Calendar.MINUTE, minute)
+                                            }
+                                            tempCal = c
+                                        },
+                                        tempCal.get(Calendar.HOUR_OF_DAY),
+                                        tempCal.get(Calendar.MINUTE),
+                                        true
+                                    ).show()
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("调整时分 ($timeText)")
+                            }
+
+                            FilledTonalButton(
+                                onClick = {
+                                    val now = Calendar.getInstance()
+                                    val c = Calendar.getInstance().apply {
+                                        timeInMillis = tempCal.timeInMillis
+                                        set(Calendar.HOUR_OF_DAY, now.get(Calendar.HOUR_OF_DAY))
+                                        set(Calendar.MINUTE, now.get(Calendar.MINUTE))
+                                    }
+                                    tempCal = c
+                                },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("同步此时刻")
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val isChosenNow = isToday && Math.abs(System.currentTimeMillis() - tempCal.timeInMillis) < 120_000L
+                        viewModel.selectedTimestamp.value = tempCal.timeInMillis
+                        viewModel.isCustomTimestamp.value = !isChosenNow
+                        showTimeDialog = false
+                    }
+                ) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimeDialog = false }) {
+                    Text("取消")
                 }
             }
         )
@@ -765,5 +993,34 @@ private fun DynamicCategoryItem(
             maxLines = 1,
             color = if (isDark) DarkTextPrimary else LightTextPrimary
         )
+    }
+}
+
+@Composable
+private fun FilterPillButton(
+    label: String,
+    isSelected: Boolean,
+    activeColor: Color,
+    isDark: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (isSelected) activeColor.copy(alpha = 0.18f) else (if (isDark) DarkSurface else Color(0xFFF1F5F9)),
+        border = if (isSelected) BorderStroke(1.dp, activeColor) else null,
+        modifier = modifier.clickable { onClick() }
+    ) {
+        Box(
+            modifier = Modifier.padding(vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = if (isSelected) activeColor else (if (isDark) DarkTextPrimary else LightTextPrimary)
+            )
+        }
     }
 }
