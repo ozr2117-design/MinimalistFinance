@@ -349,9 +349,7 @@ fun RecordScreen(
         ModalBottomSheet(
             onDismissRequest = { showAccountSheet = false },
             sheetState = accountSheetState,
-            containerColor = if (isDark) DarkSurface else LightSurface,
-            dragHandle = { BottomSheetDefaults.DragHandle() },
-            windowInsets = WindowInsets(0, 0, 0, 0)
+            containerColor = if (isDark) DarkSurface else LightSurface
         ) {
             AccountSelectorContent(
                 selectedAccount = accountName,
