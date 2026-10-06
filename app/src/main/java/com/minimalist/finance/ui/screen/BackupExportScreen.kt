@@ -142,6 +142,61 @@ fun BackupExportScreen(
                     }
                 }
             }
+
+            // 危险区域：一键清空所有历史流水 (满足用户需求，恢复纯净空库)
+            item {
+                var showClearDialog by remember { mutableStateOf(false) }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(cardBg)
+                        .padding(18.dp)
+                ) {
+                    Column {
+                        Text(text = "⚠️ 危险操作：清空所有账单流水", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = CoralRed)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(text = "清空所有账本下的所有记账流水记录，将资产统计与结余完全重置归零（不会删除账本与分类结构）。", fontSize = 13.sp, color = textSecondary)
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Button(
+                            onClick = { showClearDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = CoralRed),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("清空所有流水记录 (恢复纯净空库)", color = Color.White)
+                        }
+                    }
+                }
+
+                if (showClearDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showClearDialog = false },
+                        title = { Text(text = "确认清空所有账单流水？", fontWeight = FontWeight.Bold) },
+                        text = { Text("此操作将永久删除本地 SQLite 中存储的所有记账历史数据，重置资产大盘为初始状态，且不可撤销！") },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    viewModel.clearAllRecords {
+                                        Toast.makeText(context, "所有账单流水已全部清空，已恢复纯净空库！", Toast.LENGTH_LONG).show()
+                                        showClearDialog = false
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = CoralRed)
+                            ) {
+                                Text("确认清空", color = Color.White)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showClearDialog = false }) {
+                                Text("取消")
+                            }
+                        }
+                    )
+                }
+            }
         }
     }
 }
+

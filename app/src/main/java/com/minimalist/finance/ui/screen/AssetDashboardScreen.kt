@@ -17,8 +17,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.minimalist.finance.data.model.TransactionType
 import com.minimalist.finance.ui.theme.*
 import com.minimalist.finance.ui.viewmodel.MainViewModel
+import java.util.Locale
 
 @Composable
 fun AssetDashboardScreen(
@@ -30,8 +32,14 @@ fun AssetDashboardScreen(
     val textColor = if (isDark) DarkTextPrimary else LightTextPrimary
     val textSecondary = if (isDark) DarkTextSecondary else LightTextSecondary
     val cardBg = if (isDark) DarkSurfaceCard else LightSurfaceCard
+
     val books by viewModel.allBooks.collectAsState()
     val accounts by viewModel.allAccounts.collectAsState()
+    val records by viewModel.allRecords.collectAsState()
+    val totalExpense by viewModel.totalExpense.collectAsState()
+    val totalIncome by viewModel.totalIncome.collectAsState()
+
+    val netAsset = totalIncome - totalExpense
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -63,7 +71,7 @@ fun AssetDashboardScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 顶部核心总净资产卡片
+            // 顶部核心总净资产卡片 (完全由真实数据库驱动)
             item {
                 Box(
                     modifier = Modifier
@@ -76,7 +84,7 @@ fun AssetDashboardScreen(
                         Text(text = "预估全局总净资产 (CNY)", fontSize = 13.sp, color = textSecondary)
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "¥ 128,560.00",
+                            text = String.format(Locale.CHINA, "¥ %.2f", netAsset),
                             fontSize = 32.sp,
                             fontWeight = FontWeight.Bold,
                             color = TechBlue
@@ -87,16 +95,32 @@ fun AssetDashboardScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
-                                Text(text = "本月总收入", fontSize = 12.sp, color = textSecondary)
-                                Text(text = "+¥ 20,000.00", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MintGreen)
+                                Text(text = "累计总收入", fontSize = 12.sp, color = textSecondary)
+                                Text(
+                                    text = String.format(Locale.CHINA, "+¥ %.2f", totalIncome),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MintGreen
+                                )
                             }
                             Column {
-                                Text(text = "本月总支出", fontSize = 12.sp, color = textSecondary)
-                                Text(text = "-¥ 4,850.00", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = CoralRed)
+                                Text(text = "累计总支出", fontSize = 12.sp, color = textSecondary)
+                                Text(
+                                    text = String.format(Locale.CHINA, "-¥ %.2f", totalExpense),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = CoralRed
+                                )
                             }
                             Column {
-                                Text(text = "本月净结余", fontSize = 12.sp, color = textSecondary)
-                                Text(text = "+¥ 15,150.00", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = BlueAccent)
+                                Text(text = "累计净结余", fontSize = 12.sp, color = textSecondary)
+                                val netSign = if (netAsset >= 0) "+¥ " else "-¥ "
+                                Text(
+                                    text = String.format(Locale.CHINA, "%s%.2f", netSign, Math.abs(netAsset)),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (netAsset >= 0) BlueAccent else CoralRed
+                                )
                             }
                         }
                     }
@@ -109,6 +133,12 @@ fun AssetDashboardScreen(
             }
 
             items(books) { book ->
+                val bookRecords = records.filter { it.bookId == book.id }
+                val bIncome = bookRecords.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+                val bExpense = bookRecords.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+                val bNet = bIncome - bExpense
+                val symbol = if (book.currency == "USD") "$" else "¥"
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -124,7 +154,7 @@ fun AssetDashboardScreen(
                         Text(text = book.subtitle, fontSize = 12.sp, color = textSecondary)
                     }
                     Text(
-                        text = if (book.currency == "USD") "$ 6,500.00" else "¥ 32,800.00",
+                        text = String.format(Locale.CHINA, "%s %.2f", symbol, bNet),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = textColor
@@ -139,6 +169,7 @@ fun AssetDashboardScreen(
             }
 
             items(accounts) { acc ->
+                val symbol = if (acc.currency == "USD") "$" else "¥"
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -153,9 +184,14 @@ fun AssetDashboardScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(text = acc.name, fontSize = 15.sp, color = textColor)
                     }
-                    Text(text = "¥ ${acc.balance}", fontSize = 14.sp, color = textSecondary)
+                    Text(
+                        text = String.format(Locale.CHINA, "%s %.2f", symbol, acc.balance),
+                        fontSize = 14.sp,
+                        color = textSecondary
+                    )
                 }
             }
         }
     }
 }
+

@@ -27,7 +27,6 @@ fun DrawerMenu(
     onNavigateToDashboard: () -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToPeriodic: () -> Unit,
-    onNavigateToSaving: () -> Unit,
     onNavigateToBackup: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onCloseDrawer: () -> Unit,
@@ -134,17 +133,6 @@ fun DrawerMenu(
                 onClick = {
                     onCloseDrawer()
                     onNavigateToPeriodic()
-                }
-            )
-
-            DrawerMenuItem(
-                icon = Icons.Default.Savings,
-                title = "存钱计划",
-                textColor = textColor,
-                textSecondary = textSecondary,
-                onClick = {
-                    onCloseDrawer()
-                    onNavigateToSaving()
                 }
             )
 

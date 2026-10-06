@@ -1,21 +1,27 @@
 package com.minimalist.finance.ui.viewmodel
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.minimalist.finance.data.AppDatabase
 import com.minimalist.finance.data.model.*
 import com.minimalist.finance.ui.theme.ThemeMode
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getDatabase(application, viewModelScope)
     val bookDao = database.bookDao()
     val categoryDao = database.categoryDao()
     val accountDao = database.accountDao()
     val recordDao = database.recordDao()
-    val savingPlanDao = database.savingPlanDao()
+    val periodicRuleDao = database.periodicRuleDao()
+    val installmentPlanDao = database.installmentPlanDao()
 
     // 主题状态
     var currentThemeMode = MutableStateFlow(ThemeMode.DARK)
@@ -24,35 +30,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val allBooks = bookDao.getAllActiveBooks().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     var currentBookId = MutableStateFlow<Long>(1L)
 
-    // 当前页面交易类型 (支出 / 收入 / 转账)
+    // 资产账户流
+    val allAccounts = accountDao.getAllAccounts().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // 当前页面交易类型 (支出 / 收入)
     var currentTransactionType = MutableStateFlow(TransactionType.EXPENSE)
 
-    // 分类列表
-    val expenseCategories = categoryDao.getCategoriesByType(TransactionType.EXPENSE, 0)
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-    val incomeCategories = categoryDao.getCategoriesByType(TransactionType.INCOME, 0)
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    // 动态根据当前选中的账本与交易类型拉取专属分类！
+    val currentCategories = combine(currentBookId, currentTransactionType) { bId, type ->
+        Pair(bId, type)
+    }.flatMapLatest { (bId, type) ->
+        categoryDao.getCategoriesByBookAndType(bId, type)
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     var selectedCategoryId = MutableStateFlow<Long?>(null)
+    var selectedCategoryName = MutableStateFlow<String>("")
 
-    // 转账账户
-    val allAccounts = accountDao.getAllAccounts().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-    var fromAccountId = MutableStateFlow<Long?>(null)
-    var toAccountId = MutableStateFlow<Long?>(null)
+    // 动态选中的扣款账户 (默认微信或支付宝)
+    var selectedAccountName = MutableStateFlow<String>("微信零钱")
 
-    // 金额与输入表达式
+    // 动态选中的记账时间戳 (默认此时此刻真实手机时间)
+    var selectedTimestamp = MutableStateFlow<Long>(System.currentTimeMillis())
+
+    // 动态选中的小票图片
+    var selectedImageUri = MutableStateFlow<Uri?>(null)
+
+    // 动态标签
+    var selectedTag = MutableStateFlow<String>("")
+
+    // 账单金额与备注
     var amountExpression = MutableStateFlow("0.0")
     var remarkText = MutableStateFlow("")
-    var feeText = MutableStateFlow("0.0")
-    var discountText = MutableStateFlow("0.0")
 
+    // 流水观察
     val allRecords = recordDao.getAllRecords().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    fun deleteRecord(record: Record) {
-        viewModelScope.launch {
-            recordDao.deleteRecord(record)
-        }
-    }
+    // 真实大盘统计 (完全基于本地 SQLite 计算，无任何虚假数据)
+    val totalExpense = recordDao.getTotalExpense().map { it ?: 0.0 }.stateIn(viewModelScope, SharingStarted.Lazily, 0.0)
+    val totalIncome = recordDao.getTotalIncome().map { it ?: 0.0 }.stateIn(viewModelScope, SharingStarted.Lazily, 0.0)
+
+    // 周期与分期规则流
+    val periodicRules = periodicRuleDao.getAllRules().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val installmentPlans = installmentPlanDao.getAllPlans().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     init {
         viewModelScope.launch {
@@ -101,7 +120,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         amountExpression.value = "0.0"
     }
 
-    // 简单计算表达式总和
     private fun evaluateAmount(): Double {
         val exp = amountExpression.value
         return try {
@@ -133,37 +151,76 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 type = currentTransactionType.value,
                 amount = amount,
                 categoryId = selectedCategoryId.value,
-                fromAccountId = fromAccountId.value,
-                toAccountId = toAccountId.value,
-                fee = feeText.value.toDoubleOrNull() ?: 0.0,
-                discount = discountText.value.toDoubleOrNull() ?: 0.0,
-                remark = remarkText.value
+                categoryName = selectedCategoryName.value,
+                remark = remarkText.value,
+                tag = selectedTag.value,
+                timestamp = selectedTimestamp.value
             )
             recordDao.insertRecord(record)
             onClear()
             remarkText.value = ""
+            selectedImageUri.value = null
+            selectedTimestamp.value = System.currentTimeMillis() // 重置为最新时间
             onSuccess()
+        }
+    }
+
+    // 删除单笔流水
+    fun deleteRecord(record: Record) {
+        viewModelScope.launch {
+            recordDao.deleteRecord(record)
+        }
+    }
+
+    // 一键清空所有历史流水 (还原纯净空库)
+    fun clearAllRecords(onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            recordDao.clearAllRecords()
+            onComplete()
         }
     }
 
     // 新增账本
     fun addNewBook(name: String, subtitle: String, type: BookType, currency: String) {
         viewModelScope.launch {
-            bookDao.insertBook(
-                Book(
-                    name = name,
-                    subtitle = subtitle,
-                    type = type,
-                    currency = currency
-                )
+            val newId = bookDao.insertBook(
+                Book(name = name, subtitle = subtitle, type = type, currency = currency)
             )
+            val defaultCats = listOf(
+                Category(bookId = newId, name = "日常投入", iconName = "payments", type = TransactionType.EXPENSE, sortOrder = 1),
+                Category(bookId = newId, name = "必要支出", iconName = "shopping_cart", type = TransactionType.EXPENSE, sortOrder = 2),
+                Category(bookId = newId, name = "其它支出", iconName = "more_horiz", type = TransactionType.EXPENSE, sortOrder = 3),
+                Category(bookId = newId, name = "日常回流", iconName = "account_balance_wallet", type = TransactionType.INCOME, sortOrder = 1),
+                Category(bookId = newId, name = "其它收入", iconName = "more_horiz", type = TransactionType.INCOME, sortOrder = 2)
+            )
+            categoryDao.insertCategories(defaultCats)
+            currentBookId.value = newId
         }
     }
 
-    // 交换转账账户
-    fun swapTransferAccounts() {
-        val temp = fromAccountId.value
-        fromAccountId.value = toAccountId.value
-        toAccountId.value = temp
+    // 周期规则增删
+    fun addPeriodicRule(rule: PeriodicRule) {
+        viewModelScope.launch {
+            periodicRuleDao.insertRule(rule)
+        }
+    }
+
+    fun deletePeriodicRule(rule: PeriodicRule) {
+        viewModelScope.launch {
+            periodicRuleDao.deleteRule(rule)
+        }
+    }
+
+    // 分期计划增删
+    fun addInstallmentPlan(plan: InstallmentPlan) {
+        viewModelScope.launch {
+            installmentPlanDao.insertPlan(plan)
+        }
+    }
+
+    fun deleteInstallmentPlan(plan: InstallmentPlan) {
+        viewModelScope.launch {
+            installmentPlanDao.deletePlan(plan)
+        }
     }
 }

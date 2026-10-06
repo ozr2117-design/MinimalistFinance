@@ -15,7 +15,7 @@ enum class BookType {
 }
 
 /**
- * 账本表 (支持无限新建，物理隔离)
+ * 账本表
  */
 @Entity(tableName = "books")
 data class Book(
@@ -32,30 +32,29 @@ data class Book(
 )
 
 /**
- * 分类类型：支出、收入
+ * 交易类型：支出、收入
  */
 enum class TransactionType {
     EXPENSE,    // 支出
-    INCOME,     // 收入
-    TRANSFER    // 转账
+    INCOME      // 收入
 }
 
 /**
- * 分类表 (支出精简五项：衣食住行其他；收入六大经典)
+ * 分类表 (各账本拥有完全独立的专属分类)
  */
 @Entity(tableName = "categories")
 data class Category(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    val bookId: Long,             // 所属账本ID (1:日常, 2:境内投资, 3:境外投资, 4:长期储蓄)
     val name: String,
     val iconName: String,
     val type: TransactionType,
-    val bookId: Long = 0, // 0 表示通用分类，特定 bookId 表示账本专属
     val sortOrder: Int = 0
 )
 
 /**
- * 资产账户表 (微信钱包、支付宝、招商银行、长桥证券等)
+ * 资产账户表
  */
 @Entity(tableName = "accounts")
 data class Account(
@@ -68,60 +67,59 @@ data class Account(
 )
 
 /**
- * 记账明细流水表
+ * 记账流水表 (完全真实记录，绝无虚假数据)
  */
 @Entity(tableName = "records")
 data class Record(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val bookId: Long,                      // 所属账本
-    val type: TransactionType,             // 支出 / 收入 / 转账
+    val type: TransactionType,             // 支出 / 收入
     val amount: Double,                    // 交易金额
     val categoryId: Long? = null,          // 分类ID
-    val fromAccountId: Long? = null,       // 转出账户/付款账户
-    val toAccountId: Long? = null,         // 转入账户 (仅转账)
-    val fee: Double = 0.0,                 // 手续费
-    val discount: Double = 0.0,            // 优惠扣减
+    val categoryName: String = "",         // 分类名称
+    val accountId: Long? = null,           // 扣款/入账账户
     val remark: String = "",               // 备注
     val tag: String = "",                  // 标签
-    val photoUri: String? = null,          // 票据图片
     val timestamp: Long = System.currentTimeMillis()
 )
 
 /**
- * 周期规则表 (房租、工资、固定定投)
+ * 周期规则表 (对应图一表单项)
  */
 @Entity(tableName = "periodic_rules")
 data class PeriodicRule(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val name: String,
-    val type: TransactionType,
-    val amount: Double,
-    val categoryId: Long? = null,
-    val accountId: Long? = null,
-    val bookId: Long,
-    val frequency: String,                 // MONTHLY, WEEKLY, YEARLY, DAILY
-    val dayOfMonth: Int = 1,               // 每月第几天触发
-    val isAutoRecord: Boolean = true,      // 是否全自动记账 (false 为弹窗提醒)
-    val nextTriggerTime: Long,
-    val isEnabled: Boolean = true
+    val name: String,                      // 规则备注/名称
+    val type: TransactionType,             // 支出/收入
+    val amount: Double,                    // 金额
+    val bookId: Long,                      // 账本
+    val categoryName: String,              // 分类
+    val accountName: String,               // 扣款账户
+    val startDate: String,                 // 开始日期 (如 2026-10-06)
+    val frequency: String,                 // 重复周期: 每天 / 每周 / 每月 / 每年
+    val endType: String = "永不结束",      // 结束方式
+    val timeOfDay: String = "12:00",       // 账单时间点
+    val isEnabled: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 /**
- * 存钱计划表 (365天存钱法、52周存钱法、12存单法)
+ * 分期管理表 (对应图二分期逻辑)
  */
-@Entity(tableName = "saving_plans")
-data class SavingPlan(
+@Entity(tableName = "installment_plans")
+data class InstallmentPlan(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val name: String,                      // 如 "365存钱法"
-    val planType: String,                  // FLEXIBLE, DAY_365, WEEK_52, FIXED, DEPOSIT_12
-    val targetAmount: Double,              // 目标金额
-    val currentAmount: Double = 0.0,       // 当前已存金额
-    val targetSavingsBookId: Long,         // 关联的长期储蓄账本ID
-    val completedSteps: Int = 0,           // 已打卡步数
-    val totalSteps: Int = 365,             // 总步数
+    val name: String,                      // 分期项目名 (如 MacBook Pro 16寸)
+    val totalAmount: Double,               // 总金额
+    val totalPeriods: Int,                 // 总期数 (如 12)
+    val currentPeriod: Int = 1,            // 当前期数
+    val monthlyAmount: Double,             // 每期扣款金额
+    val bookId: Long,                      // 关联账本
+    val accountName: String,               // 扣款账户
+    val dayOfMonth: Int = 8,               // 每月几号扣款
     val isFinished: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )

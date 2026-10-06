@@ -27,8 +27,8 @@ interface BookDao {
 
 @Dao
 interface CategoryDao {
-    @Query("SELECT * FROM categories WHERE type = :type AND (bookId = 0 OR bookId = :bookId) ORDER BY sortOrder ASC")
-    fun getCategoriesByType(type: TransactionType, bookId: Long): Flow<List<Category>>
+    @Query("SELECT * FROM categories WHERE bookId = :bookId AND type = :type ORDER BY sortOrder ASC")
+    fun getCategoriesByBookAndType(bookId: Long, type: TransactionType): Flow<List<Category>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCategories(categories: List<Category>)
@@ -63,30 +63,48 @@ interface RecordDao {
     @Delete
     suspend fun deleteRecord(record: Record)
 
+    @Query("DELETE FROM records")
+    suspend fun clearAllRecords()
+
+    @Query("SELECT SUM(amount) FROM records WHERE type = 'EXPENSE'")
+    fun getTotalExpense(): Flow<Double?>
+
+    @Query("SELECT SUM(amount) FROM records WHERE type = 'INCOME'")
+    fun getTotalIncome(): Flow<Double?>
+
     @Query("SELECT SUM(amount) FROM records WHERE bookId = :bookId AND type = 'EXPENSE'")
-    fun getTotalExpense(bookId: Long): Flow<Double?>
+    fun getBookExpense(bookId: Long): Flow<Double?>
 
     @Query("SELECT SUM(amount) FROM records WHERE bookId = :bookId AND type = 'INCOME'")
-    fun getTotalIncome(bookId: Long): Flow<Double?>
+    fun getBookIncome(bookId: Long): Flow<Double?>
 }
 
 @Dao
 interface PeriodicRuleDao {
-    @Query("SELECT * FROM periodic_rules WHERE isEnabled = 1")
-    fun getEnabledRules(): Flow<List<PeriodicRule>>
+    @Query("SELECT * FROM periodic_rules ORDER BY id DESC")
+    fun getAllRules(): Flow<List<PeriodicRule>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRule(rule: PeriodicRule): Long
+
+    @Delete
+    suspend fun deleteRule(rule: PeriodicRule)
+
+    @Update
+    suspend fun updateRule(rule: PeriodicRule)
 }
 
 @Dao
-interface SavingPlanDao {
-    @Query("SELECT * FROM saving_plans ORDER BY id DESC")
-    fun getAllPlans(): Flow<List<SavingPlan>>
+interface InstallmentPlanDao {
+    @Query("SELECT * FROM installment_plans ORDER BY id DESC")
+    fun getAllPlans(): Flow<List<InstallmentPlan>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertPlan(plan: SavingPlan): Long
+    suspend fun insertPlan(plan: InstallmentPlan): Long
+
+    @Delete
+    suspend fun deletePlan(plan: InstallmentPlan)
 
     @Update
-    suspend fun updatePlan(plan: SavingPlan)
+    suspend fun updatePlan(plan: InstallmentPlan)
 }
