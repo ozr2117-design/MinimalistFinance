@@ -1,5 +1,9 @@
 package com.minimalist.finance.ui.screen
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,26 +13,36 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.minimalist.finance.ui.theme.*
+import com.minimalist.finance.util.AppUpdateInfo
+import com.minimalist.finance.util.AppUpdateManager
+import kotlinx.coroutines.launch
 
 @Composable
 fun AboutScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val isDark = MaterialTheme.colorScheme.background == DarkBackground
     val textColor = if (isDark) DarkTextPrimary else LightTextPrimary
     val textSecondary = if (isDark) DarkTextSecondary else LightTextSecondary
     val cardBg = if (isDark) DarkSurfaceCard else LightSurfaceCard
+
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -80,6 +94,51 @@ fun AboutScreen(
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(text = "数簿", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textColor)
                 Text(text = "版本 1.0.5 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 检查更新按键 (Gitee 国内直连 / GitHub 备份镜像)
+                OutlinedButton(
+                    onClick = {
+                        if (isCheckingUpdate) return@OutlinedButton
+                        isCheckingUpdate = true
+                        coroutineScope.launch {
+                            val result = AppUpdateManager.checkUpdate(currentVersionCode = 6)
+                            isCheckingUpdate = false
+                            result.onSuccess { info ->
+                                if (info != null) {
+                                    updateInfo = info
+                                    showUpdateDialog = true
+                                } else {
+                                    Toast.makeText(context, "🎉 当前已是最新版本 (v1.0.5)", Toast.LENGTH_SHORT).show()
+                                }
+                            }.onFailure { err ->
+                                Toast.makeText(context, "检查更新失败: ${err.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, BlueAccent.copy(alpha = 0.5f))
+                ) {
+                    if (isCheckingUpdate) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = BlueAccent
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "正在检查更新...", fontSize = 13.sp, color = BlueAccent)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            tint = BlueAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "检查新版本", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = BlueAccent)
+                    }
+                }
             }
 
             item {
@@ -127,5 +186,74 @@ fun AboutScreen(
                 }
             }
         }
+    }
+
+    // 发现新版本弹窗
+    if (showUpdateDialog && updateInfo != null) {
+        val info = updateInfo!!
+        AlertDialog(
+            onDismissRequest = { showUpdateDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.CloudDownload,
+                    contentDescription = null,
+                    tint = BlueAccent,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "发现新版本 ${info.versionName}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (info.releaseDate.isNotBlank()) {
+                        Text(
+                            text = "发布日期: ${info.releaseDate}",
+                            fontSize = 12.sp,
+                            color = textSecondary
+                        )
+                    }
+                    HorizontalDivider(color = if (isDark) DarkBorder else LightBorder)
+                    Text(
+                        text = "更新内容：",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textColor
+                    )
+                    Text(
+                        text = info.changelog,
+                        fontSize = 13.sp,
+                        color = textColor.copy(alpha = 0.85f),
+                        lineHeight = 18.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUpdateDialog = false
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.downloadUrl)).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "打开下载链接失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text("立即下载更新")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUpdateDialog = false }) {
+                    Text("稍后再说")
+                }
+            }
+        )
     }
 }
