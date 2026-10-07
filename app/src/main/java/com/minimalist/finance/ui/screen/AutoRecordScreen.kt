@@ -274,6 +274,27 @@ fun AutoRecordScreen(
                         ) {
                             Text("🏪 模拟便利店付款 ¥6.80 (便利蜂) -> 分类: 食")
                         }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // 测试按钮 4 (转账收款)
+                        OutlinedButton(
+                            onClick = {
+                                AutoRecordAccessibilityService.simulateAutoRecord(
+                                    context,
+                                    1.20,
+                                    "微信转账收款",
+                                    "微信",
+                                    com.minimalist.finance.data.model.TransactionType.INCOME
+                                ) { cat ->
+                                    Toast.makeText(context, "⚡ 模拟成功！已自动记账: 微信收款 +¥1.20 (分类: $cat)", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("💰 模拟微信转账收款 +¥1.20 (存入零钱) -> 收入")
+                        }
                     }
                 }
             }

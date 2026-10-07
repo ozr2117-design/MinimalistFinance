@@ -114,7 +114,7 @@ fun DrawerMenu(
 
             DrawerMenuItem(
                 icon = Icons.Default.Search,
-                title = "搜索账单",
+                title = "我要查账",
                 textColor = textColor,
                 onClick = {
                     onCloseDrawer()

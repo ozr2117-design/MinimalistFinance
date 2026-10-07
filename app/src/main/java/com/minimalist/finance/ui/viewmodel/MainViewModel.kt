@@ -263,7 +263,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 新增账本
+    // 删除账本 (默认主账本不可删除)
+    fun deleteBook(book: Book) {
+        viewModelScope.launch {
+            if (book.isDefault) return@launch
+            if (currentBookId.value == book.id) {
+                val allActive = bookDao.getAllBooksList().filter { it.id != book.id && !it.isArchived }
+                val fallbackBook = allActive.firstOrNull { it.isDefault } ?: allActive.firstOrNull()
+                fallbackBook?.let {
+                    currentBookId.value = it.id
+                }
+            }
+            bookDao.deleteBook(book)
+        }
+    }
+
+    // 从预设选项模板一键恢复或新建账本
+    fun addPresetBook(template: PresetBookTemplate) {
+        viewModelScope.launch {
+            val newId = bookDao.insertBook(
+                Book(
+                    name = template.name,
+                    subtitle = template.subtitle,
+                    type = template.type,
+                    currency = template.currency
+                )
+            )
+            val cats = mutableListOf<Category>()
+            template.expenseCategories.forEachIndexed { index, catName ->
+                cats.add(Category(bookId = newId, name = catName, iconName = "payments", type = TransactionType.EXPENSE, sortOrder = index + 1))
+            }
+            template.incomeCategories.forEachIndexed { index, catName ->
+                cats.add(Category(bookId = newId, name = catName, iconName = "account_balance_wallet", type = TransactionType.INCOME, sortOrder = index + 1))
+            }
+            categoryDao.insertCategories(cats)
+            currentBookId.value = newId
+        }
+    }
+
+    // 新增自主定义账本
     fun addNewBook(name: String, subtitle: String, type: BookType, currency: String) {
         viewModelScope.launch {
             val newId = bookDao.insertBook(
@@ -531,3 +569,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
+
+data class PresetBookTemplate(
+    val name: String,
+    val subtitle: String,
+    val type: BookType,
+    val currency: String,
+    val expenseCategories: List<String>,
+    val incomeCategories: List<String>
+)
+
+val DEFAULT_PRESET_BOOKS = listOf(
+    PresetBookTemplate(
+        name = "境内投资账本",
+        subtitle = "A股 · 基金 · 固收",
+        type = BookType.DOMESTIC_INVEST,
+        currency = "CNY",
+        expenseCategories = listOf("股票买入", "基金申购", "理财购买", "交易税费", "其他投入"),
+        incomeCategories = listOf("股票卖出", "基金赎回", "分红派息", "理财收益", "打新收益", "其它收益")
+    ),
+    PresetBookTemplate(
+        name = "境外投资账本",
+        subtitle = "美港股 · 多币种",
+        type = BookType.OVERSEAS_INVEST,
+        currency = "USD",
+        expenseCategories = listOf("美股买入", "港股买入", "期权买入", "跨境电汇", "其他投入"),
+        incomeCategories = listOf("美股卖出", "港股卖出", "境外股息", "美元利息", "期权盈利", "其它收益")
+    ),
+    PresetBookTemplate(
+        name = "长期储蓄账本",
+        subtitle = "定期 · 存单 · 国债",
+        type = BookType.SAVINGS,
+        currency = "CNY",
+        expenseCategories = listOf("定期存款", "大额存单", "储蓄国债", "养老储蓄", "其他储蓄"),
+        incomeCategories = listOf("存单到期", "利息到账", "国债兑付", "提前支取", "其他回款")
+    ),
+    PresetBookTemplate(
+        name = "旅行度假账本",
+        subtitle = "机票 · 酒店 · 游玩",
+        type = BookType.CUSTOM,
+        currency = "CNY",
+        expenseCategories = listOf("交通机票", "酒店住宿", "景区门票", "餐饮美食", "特色纪念", "其他旅行"),
+        incomeCategories = listOf("旅行津贴", "退订回款", "同行平摊", "其它")
+    ),
+    PresetBookTemplate(
+        name = "生意人情账本",
+        subtitle = "应酬 · 礼金 · 往来",
+        type = BookType.CUSTOM,
+        currency = "CNY",
+        expenseCategories = listOf("商务宴请", "人情礼金", "礼品送往", "差旅报销", "办公杂项"),
+        incomeCategories = listOf("客户回款", "人情收礼", "报销入账", "其它")
+    )
+)

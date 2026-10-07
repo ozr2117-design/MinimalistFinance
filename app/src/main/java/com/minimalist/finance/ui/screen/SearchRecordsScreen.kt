@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.minimalist.finance.data.model.Record
@@ -184,7 +185,7 @@ fun SearchRecordsScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = textColor)
                     }
                     Text(
-                        text = "账单对账与搜索",
+                        text = "我要查账",
                         fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         color = textColor
@@ -499,14 +500,19 @@ private fun RecordItemCard(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
                         text = if (record.remark.isNotBlank()) record.remark else (if (record.categoryName.isNotBlank()) record.categoryName else (if (isExpense) "支出" else "收入")),
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
                         color = textColor,
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     if (record.accountName.isNotBlank()) {
                         Spacer(modifier = Modifier.width(6.dp))
@@ -524,15 +530,42 @@ private fun RecordItemCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(3.dp))
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = dateStr, fontSize = 12.sp, color = textSecondary)
-                    if (record.categoryName.isNotBlank() && record.remark.isNotBlank()) {
-                        Text(text = " · ${record.categoryName}", fontSize = 12.sp, color = textSecondary)
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = buildString {
+                            append(dateStr)
+                            if (record.categoryName.isNotBlank() && record.remark.isNotBlank()) {
+                                append(" · ")
+                                append(record.categoryName)
+                            }
+                        },
+                        fontSize = 12.sp,
+                        color = textSecondary,
+                        maxLines = 1,
+                        softWrap = false
+                    )
                     if (record.tag.isNotBlank()) {
-                        Text(text = " · #${record.tag}", fontSize = 12.sp, color = BlueAccent)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = BlueAccent.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "#${record.tag}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = BlueAccent,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
                     }
                 }
             }
