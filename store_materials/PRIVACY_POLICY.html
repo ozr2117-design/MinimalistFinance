@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数簿 (Shubu) - 隐私政策</title>
+  <style>
+    :root {
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text-main: #0F172A;
+      --text-muted: #64748B;
+      --primary: #2563EB;
+      --border: #E2E8F0;
+      --highlight: #EFF6FF;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #090D16;
+        --card-bg: #131B2E;
+        --text-main: #F1F5F9;
+        --text-muted: #94A3B8;
+        --primary: #3B82F6;
+        --border: #1E293B;
+        --highlight: #172554;
+      }
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.75;
+      -webkit-font-smoothing: antialiased;
+    }
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 32px 20px 60px 20px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background-color: var(--highlight);
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    h1 {
+      margin: 0 0 10px 0;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .meta {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .card {
+      background-color: var(--card-bg);
+      border-radius: 16px;
+      padding: 28px 24px;
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+    h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-top: 24px;
+      margin-bottom: 12px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    h2::before {
+      content: "";
+      display: inline-block;
+      width: 4px;
+      height: 16px;
+      background-color: var(--primary);
+      border-radius: 2px;
+    }
+    p, li {
+      font-size: 14.5px;
+      color: var(--text-main);
+      opacity: 0.92;
+    }
+    ul, ol {
+      padding-left: 20px;
+      margin-bottom: 16px;
+    }
+    li {
+      margin-bottom: 6px;
+    }
+    .alert {
+      background-color: var(--highlight);
+      border-left: 4px solid var(--primary);
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 13.5px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+    }
+    th {
+      background-color: var(--highlight);
+      font-weight: 600;
+    }
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge">100% 纯本地离线 · 零云端上传 · 零商业SDK</div>
+      <h1>数簿 (Shubu) 隐私政策</h1>
+      <div class="meta">更新日期：2026年10月7日 ｜ 生效日期：2026年10月7日</div>
+    </header>
+
+    <div class="card">
+      <div class="alert">
+        <strong>【郑重承诺】</strong> 数簿（英文名：Shubu，以下简称“本应用”或“我们”）坚持纯粹本地离线隐私设计理念。除应用内版本更新检测外，<strong>不上传、不收集、不共享您的任何账单、流水、账户余额等核心财务隐私数据</strong>。所有数据仅安全保存在您的手机设备沙盒中。
+      </div>
+
+      <h2>一、核心隐私设计原则</h2>
+      <p>1. <strong>纯本地离线存储</strong>：您记录的每一笔收支流水、账户信息、分期计划与账本数据，均仅保存在您手机本地 SQLite 数据库中，任何外部人员（包括开发者本人）均无权亦无法访问。</p>
+      <p>2. <strong>零第三方商业 SDK</strong>：本应用未集成任何第三方广告 SDK（如穿山甲、优量汇等）、未集成任何第三方统计分析 SDK（如友盟等），彻底消除后台静默追踪风险。</p>
+      <p>3. <strong>无账号与无云端体系</strong>：免注册、免登录、免绑定手机号，打开即用，杜绝云端数据库泄露隐患。</p>
+
+      <h2>二、系统权限使用场景清单</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>权限名称 / 代码标识</th>
+            <th>使用目的及使用场景</th>
+            <th>隐私保护说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>网络访问</strong><br><code>INTERNET</code></td>
+            <td>用于在用户主动检查更新时，从 Gitee / GitHub 拉取最新版本描述文件 <code>version.json</code>。</td>
+            <td>仅发送单次无标识 GET 请求，绝不上传账本数据。</td>
+          </tr>
+          <tr>
+            <td><strong>网络状态</strong><br><code>ACCESS_NETWORK_STATE</code></td>
+            <td>用于检查更新前判断设备是否联网，优化交互体验。</td>
+            <td>仅本地查询网络联通性。</td>
+          </tr>
+          <tr>
+            <td><strong>无障碍服务</strong><br><code>BIND_ACCESSIBILITY_SERVICE</code></td>
+            <td>在用户主动开启后，用于在微信扫码支付或转账完成瞬间，自动识别账单金额完成本地入账。</td>
+            <td>由系统原生回调运行，绝不记录按键密码，绝不录屏或外传。</td>
+          </tr>
+          <tr>
+            <td><strong>通知监听</strong><br><code>BIND_NOTIFICATION_LISTENER_SERVICE</code></td>
+            <td>在用户明确授权后，本地监听微信/支付宝支付到达通知以自动生成记账流水。</td>
+            <td>仅在手机本地比对关键词，非支付通知直接丢弃。</td>
+          </tr>
+          <tr>
+            <td><strong>悬浮窗权限</strong><br><code>SYSTEM_ALERT_WINDOW</code></td>
+            <td>用于在自动记账完成时，在屏幕顶层展现快捷补分类轻量弹条。</td>
+            <td>用户可在设置中随时关闭该功能。</td>
+          </tr>
+          <tr>
+            <td><strong>相机权限</strong><br><code>CAMERA</code></td>
+            <td>用于用户记账时拍照保存纸质发票或消费小票附件。</td>
+            <td>照片仅保存在手机应用私有目录。</td>
+          </tr>
+          <tr>
+            <td><strong>通知权限</strong><br><code>POST_NOTIFICATIONS</code></td>
+            <td>用于自动记账成功轻提示及每月账单日定时提醒。</td>
+            <td>仅产生设备本地通知。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>三、第三方 SDK 清单</h2>
+      <p>本应用当前版本（v1.0.5）<strong>未接入任何第三方商业广告 SDK、推送 SDK 或数据分析 SDK</strong>。全部功能由原生代码自主实现，最大化保障纯净体验。</p>
+
+      <h2>四、信息的存储与完全销毁</h2>
+      <p>1. <strong>存储地点</strong>：您的所有数据完全存储于您个人的设备本地私有目录。</p>
+      <p>2. <strong>彻底销毁</strong>：您可随时在应用内删除单笔流水、清空账本。当您卸载本应用或清除应用数据时，所有数据将在物理层面从您的手机中彻底销毁，不可恢复。</p>
+
+      <h2>五、您的权利</h2>
+      <p>您拥有对所有财务数据的完整支配权：支持自由查阅、修改、删除流水与账本；支持随时在手机系统设置中撤回各项系统权限。</p>
+
+      <h2>六、未成年人保护</h2>
+      <p>本应用为无不良内容、无任何充值内购的纯粹记账工具。未成年人可在监护人指导下使用以培养健康理性消费习惯。</p>
+
+      <h2>七、联系我们</h2>
+      <p>如对本隐私政策有任何疑问或建议，请联系：</p>
+      <p>• 开源项目主页：<a href="https://github.com/ozr2117-design/MinimalistFinance" target="_blank" style="color:var(--primary);">GitHub 仓库</a><br>
+      • 客服与反馈邮箱：<code>ozr2117@163.com</code></p>
+    </div>
+
+    <footer>
+      © 2026 数簿 (Shubu). 每一笔都有数，过理性的生活。
+    </footer>
+  </div>
+</body>
+</html>

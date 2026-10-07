@@ -26,8 +26,14 @@ jobs:
       with:
         gradle-version: '8.10.2'
 
-    - name: Build Debug APK
-      run: gradle assembleDebug --stacktrace
+    - name: Build Android APKs (Release & Debug)
+      run: gradle assembleRelease assembleDebug --stacktrace
+
+    - name: Upload Release APK (Signed for App Stores)
+      uses: actions/upload-artifact@v4
+      with:
+        name: 数簿-release-apk
+        path: app/build/outputs/apk/release/*.apk
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
@@ -39,4 +45,6 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: app/build/outputs/apk/debug/*.apk
+        files: |
+          app/build/outputs/apk/release/*.apk
+          app/build/outputs/apk/debug/*.apk

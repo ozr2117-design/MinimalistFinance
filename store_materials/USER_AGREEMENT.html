@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数簿 (Shubu) - 用户服务协议</title>
+  <style>
+    :root {
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text-main: #0F172A;
+      --text-muted: #64748B;
+      --primary: #2563EB;
+      --border: #E2E8F0;
+      --highlight: #EFF6FF;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #090D16;
+        --card-bg: #131B2E;
+        --text-main: #F1F5F9;
+        --text-muted: #94A3B8;
+        --primary: #3B82F6;
+        --border: #1E293B;
+        --highlight: #172554;
+      }
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.75;
+      -webkit-font-smoothing: antialiased;
+    }
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 32px 20px 60px 20px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background-color: var(--highlight);
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    h1 {
+      margin: 0 0 10px 0;
+      font-size: 26px;
+      font-weight: 700;
+    }
+    .meta {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .card {
+      background-color: var(--card-bg);
+      border-radius: 16px;
+      padding: 28px 24px;
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border);
+    }
+    h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-top: 24px;
+      margin-bottom: 12px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    h2::before {
+      content: "";
+      display: inline-block;
+      width: 4px;
+      height: 16px;
+      background-color: var(--primary);
+      border-radius: 2px;
+    }
+    p, li {
+      font-size: 14.5px;
+      opacity: 0.92;
+    }
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge">数簿 (Shubu) 用户许可</div>
+      <h1>用户服务协议</h1>
+      <div class="meta">生效日期：2026年10月7日 ｜ 开发者：数簿团队</div>
+    </header>
+
+    <div class="card">
+      <h2>一、协议总则</h2>
+      <p>欢迎使用「数簿」（英文名：Shubu，以下简称“本软件”）。本协议是您（以下称“用户”）与开发者之间就下载、安装、使用本软件所订立的协议。请您仔细阅读本协议各条款，充分理解各条款内容。</p>
+
+      <h2>二、软件功能与服务说明</h2>
+      <p>1. 本软件是一款专注于个人收支记账、多维账本管理与自动化录入辅助的纯本地工具软件。</p>
+      <p>2. 本软件为<strong>完全免费、无广告、纯本地离线运行</strong>的软件，不提供任何形式的存款、理财投资推荐、信贷发放等金融中介服务。</p>
+      <p>3. 软件中提供的“境内投资”、“境外投资”、“分期周期”等板块仅作为用户的个人账务记账分类与试算工具，不构成任何投资建议。</p>
+
+      <h2>三、用户使用规范与数据责任</h2>
+      <p>1. 用户在合法合规的前提下享有本软件的使用权。</p>
+      <p>2. <strong>数据自主保管责任</strong>：鉴于本软件采取 100% 纯本地离线存储策略，用户的全部账单数据仅保留在用户当前使用的设备本地。用户需自行妥善保管设备及本地备份文件。因用户自行刷机、恢复出厂设置、设备遗失或卸载软件导致的数据灭失，由用户自行承担。</p>
+      <p>3. 用户不得利用本软件从事任何违反中华人民共和国法律法规的活动。</p>
+
+      <h2>四、知识产权与开源声明</h2>
+      <p>1. 本软件的代码架构、UI 视觉设计、图形徽标版权均归开发者团队所有。</p>
+      <p>2. 本软件遵循开源协议分享，用户不得将本软件打包植入恶意后门、广告 SDK 后进行二次商业转售。</p>
+
+      <h2>五、免责声明</h2>
+      <p>1. 本软件基于 Android 系统的无障碍与通知服务提供自动记账辅助功能。因第三方平台（如微信、支付宝）界面改版、系统杀后台、电池优化策略等外部因素导致自动记账未触发的，开发者将积极进行兼容性迭代，但不承担由此产生的漏记附带责任。</p>
+      <p>2. 在法律法规允许的最大范围内，本软件按“现状”提供，开发者不对软件的适销性或特定用途的适用性作任何明示或默示保证。</p>
+
+      <h2>六、协议修订与管辖</h2>
+      <p>1. 开发者有权根据法律法规或功能演进对本协议进行修订。</p>
+      <p>2. 本协议之订立、生效、解释及争议之解决，均应适用中华人民共和国大陆地区法律。</p>
+    </div>
+
+    <footer>
+      © 2026 数簿 (Shubu). 每一笔都有数，过理性的生活。
+    </footer>
+  </div>
+</body>
+</html>
