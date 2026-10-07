@@ -12,10 +12,13 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.minimalist.finance.ui.component.AppUpdateDialog
 import com.minimalist.finance.ui.component.SmoothIosDrawer
 import com.minimalist.finance.ui.screen.*
 import com.minimalist.finance.ui.theme.MinimalistFinanceTheme
 import com.minimalist.finance.ui.viewmodel.MainViewModel
+import com.minimalist.finance.util.AppUpdateInfo
+import com.minimalist.finance.util.AppUpdateManager
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
@@ -28,6 +31,19 @@ class MainActivity : ComponentActivity() {
             MinimalistFinanceTheme(themeMode = themeMode) {
                 var isDrawerOpen by remember { mutableStateOf(false) }
                 val navController = rememberNavController()
+                var autoUpdateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+
+                // 启动无感静默检查更新（带 24 小时防骚扰频控）
+                LaunchedEffect(Unit) {
+                    if (AppUpdateManager.shouldCheckAutoUpdate(this@MainActivity)) {
+                        val result = AppUpdateManager.checkUpdate(AppUpdateManager.CURRENT_VERSION_CODE)
+                        result.onSuccess { info ->
+                            if (info != null) {
+                                autoUpdateInfo = info
+                            }
+                        }
+                    }
+                }
 
                 // 平滑导航：先标记关闭抽屉，随后执行 iOS 式平滑页面转场
                 val navigateTo: (String) -> Unit = { route ->
@@ -157,6 +173,14 @@ class MainActivity : ComponentActivity() {
                             onBack = { navController.popBackStack() }
                         )
                     }
+                }
+
+                // 启动发现新版本弹窗（展示版本号、日期、详细更新说明与一键更新）
+                if (autoUpdateInfo != null) {
+                    AppUpdateDialog(
+                        updateInfo = autoUpdateInfo!!,
+                        onDismiss = { autoUpdateInfo = null }
+                    )
                 }
             }
         }

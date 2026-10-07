@@ -24,10 +24,26 @@ data class AppUpdateInfo(
 )
 
 object AppUpdateManager {
+    const val CURRENT_VERSION_CODE = 6
+    const val CURRENT_VERSION_NAME = "1.0.5"
+
     // 优先通过 Gitee 国内直连（免代理、零阻断、极速可用）
     private const val GITEE_URL = "https://gitee.com/ozr2117/MinimalistFinance/raw/main/version.json"
     // 备用通过 GitHub 官方主干
     private const val GITHUB_URL = "https://raw.githubusercontent.com/ozr2117-design/MinimalistFinance/main/version.json"
+
+    fun shouldCheckAutoUpdate(context: Context): Boolean {
+        val prefs = context.getSharedPreferences("app_update_prefs", Context.MODE_PRIVATE)
+        val lastRemindTime = prefs.getLong("last_remind_time", 0L)
+        val currentTime = System.currentTimeMillis()
+        // 若用户点击了“稍后再说”，至少间隔 24 小时才在启动时再次提示
+        return (currentTime - lastRemindTime) > 24 * 3600 * 1000L
+    }
+
+    fun recordRemindLater(context: Context) {
+        val prefs = context.getSharedPreferences("app_update_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putLong("last_remind_time", System.currentTimeMillis()).apply()
+    }
 
     suspend fun checkUpdate(currentVersionCode: Int): Result<AppUpdateInfo?> = withContext(Dispatchers.IO) {
         val jsonStr = fetchUrl(GITEE_URL) ?: fetchUrl(GITHUB_URL)
