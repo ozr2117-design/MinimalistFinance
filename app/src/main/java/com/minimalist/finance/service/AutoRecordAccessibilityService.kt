@@ -175,7 +175,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         val combined = "$title $text $bigText $subText $ticker".trim()
         if (combined.isEmpty()) return
 
-        // 识别微信或支付宝的通知（支出或收入）
+        // 识别微信、支付宝、云闪付的通知（支出或收入）
         var notifType: TransactionType? = null
         if (pkg == "com.tencent.mm") {
             if (combined.contains("收款到账") || combined.contains("已收款") || combined.contains("收到转账") ||
@@ -184,7 +184,9 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 notifType = TransactionType.INCOME
             } else if (title.contains("微信支付") || combined.contains("微信支付凭证") ||
                 combined.contains("你有一笔微信支付支出") || combined.contains("成功付款") ||
-                combined.contains("支付成功")) {
+                combined.contains("支付成功") || combined.contains("已扣款") ||
+                combined.contains("特约商户") || combined.contains("完成支付") ||
+                combined.contains("信用卡") || combined.contains("消费支出")) {
                 notifType = TransactionType.EXPENSE
             }
         } else if (pkg == "com.eg.android.AlipayGphone") {
@@ -192,13 +194,16 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 combined.contains("支付宝收款到账") || combined.contains("收到一笔款项")) {
                 notifType = TransactionType.INCOME
             } else if (title.contains("支付宝") || combined.contains("成功付款") ||
-                combined.contains("交易提醒") || combined.contains("支付成功")) {
+                combined.contains("交易提醒") || combined.contains("支付成功") ||
+                combined.contains("花呗") || combined.contains("扣款成功")) {
                 notifType = TransactionType.EXPENSE
             }
         } else {
-            if (combined.contains("收款成功") || combined.contains("收款到账")) {
+            if (combined.contains("收款成功") || combined.contains("收款到账") || combined.contains("入账")) {
                 notifType = TransactionType.INCOME
-            } else if (combined.contains("支付成功") || combined.contains("扣款成功") || combined.contains("付款成功")) {
+            } else if (combined.contains("支付成功") || combined.contains("扣款成功") ||
+                combined.contains("付款成功") || combined.contains("消费") ||
+                combined.contains("交易成功") || combined.contains("已扣款")) {
                 notifType = TransactionType.EXPENSE
             }
         }
@@ -209,7 +214,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         if (amount <= 0.0) return
 
         val partyName = extractMerchantFromNotification(combined)
-        saveAutoRecord(pkg, amount, partyName, combined, notifType)
+        val detectedAccount = extractAccountFromTexts(pkg, listOf(combined))
+        saveAutoRecord(pkg, amount, partyName, combined, notifType, detectedAccount)
     }
 
     // ====== 通道 2：页面节点解析逻辑 ======
@@ -228,7 +234,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             }
         }
 
-        // 收入语义判定 (微信转账收款、存入零钱、二维码收款等)
+        // 1. 收入语义判定 (微信转账收款、存入零钱、二维码收款等)
         val isIncome = joined.contains("你已收款") ||
                 joined.contains("资金已存入零钱") ||
                 joined.contains("已存入零钱") ||
@@ -243,7 +249,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 (joined.contains("微信转账") && joined.contains("已收款")) ||
                 (joined.contains("转账时间") && joined.contains("收款时间"))
 
-        // 支付成功语义判定 (支出)
+        // 2. 支付/扣款成功语义判定 (支出 - 泛化覆盖信用卡、点餐小程序、特约商户、扫码反扫、银联云闪付)
         val isExpense = joined.contains("支付成功") ||
                 joined.contains("付款成功") ||
                 joined.contains("交易成功") ||
@@ -253,7 +259,21 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 joined.contains("扫码付款成功") ||
                 joined.contains("成功付款") ||
                 joined.contains("向商家付款成功") ||
-                joined.contains("支付明细")
+                joined.contains("支付明细") ||
+                joined.contains("账单详情") ||
+                // 饭店扫码点餐小程序 / 信用卡快捷付常见完成文案
+                joined.contains("下单成功") ||
+                joined.contains("取餐号") ||
+                joined.contains("订单已完成") ||
+                joined.contains("订单已支付") ||
+                joined.contains("支付方式") && (joined.contains("信用卡") || joined.contains("借记卡") || joined.contains("招商银行") || joined.contains("工商银行") || joined.contains("建设银行") || joined.contains("农业银行") || joined.contains("中国银行") || joined.contains("交通银行") || joined.contains("平安银行") || joined.contains("中信银行") || joined.contains("浦发银行") || joined.contains("民生银行") || joined.contains("光大银行") || joined.contains("广发银行") || joined.contains("兴业银行") || joined.contains("邮政储蓄")) ||
+                // 聚合商户 / 商家小程序
+                (joined.contains("特约商户") && (joined.contains("扣款") || joined.contains("消费") || joined.contains("交易"))) ||
+                (joined.contains("微信支付") && (joined.contains("已扣款") || joined.contains("已支付") || joined.contains("消费成功"))) ||
+                // 银联云闪付 / 银行 App
+                joined.contains("扣款成功") ||
+                joined.contains("刷卡成功") ||
+                joined.contains("银联付款成功")
 
         val targetType = when {
             isIncome -> TransactionType.INCOME
@@ -265,12 +285,15 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         val amount = extractAmountFromList(texts) ?: return
         if (amount <= 0.0) return
 
+        // 提取支付账户（如检测到具体的信用卡，则细化账户名称）
+        val detectedAccount = extractAccountFromTexts(pkg, texts)
+
         val partyName = if (targetType == TransactionType.INCOME) {
             extractIncomeSourceFromList(texts)
         } else {
             extractMerchantFromList(texts)
         }
-        saveAutoRecord(pkg, amount, partyName, joined, targetType)
+        saveAutoRecord(pkg, amount, partyName, joined, targetType, detectedAccount)
     }
 
     /**
@@ -281,7 +304,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         amount: Double,
         partyName: String,
         rawContext: String,
-        type: TransactionType = TransactionType.EXPENSE
+        type: TransactionType = TransactionType.EXPENSE,
+        customAccount: String? = null
     ) {
         val now = System.currentTimeMillis()
 
@@ -298,7 +322,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return
         }
 
-        val accountName = when (pkg) {
+        val accountName = customAccount ?: when (pkg) {
             "com.tencent.mm" -> "微信"
             "com.eg.android.AlipayGphone" -> "支付宝"
             "com.unionpay" -> "银行卡"
@@ -308,7 +332,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         val displayName = if (partyName.isNotBlank() && !isSystemWord(partyName)) {
             partyName
         } else {
-            if (type == TransactionType.INCOME) "微信转账收款" else "扫码商户"
+            if (type == TransactionType.INCOME) "微信转账收款" else "饭店/商户消费"
         }
 
         val catName = classifyCategory("$displayName $rawContext", type)
@@ -365,10 +389,37 @@ class AutoRecordAccessibilityService : AccessibilityService() {
     }
 
     private fun isSystemWord(word: String): Boolean {
-        return word in listOf(
+        val cleaned = word.trim()
+        return cleaned in listOf(
             "微信支付", "支付宝", "支付成功", "付款成功", "交易成功", "完成", "收款成功", "账单详情", "人民币",
-            "零钱余额", "转账时间", "收款时间", "你已收款", "资金已存入零钱", "你已收款，资金已存入零钱"
+            "零钱余额", "转账时间", "收款时间", "你已收款", "资金已存入零钱", "你已收款，资金已存入零钱",
+            "微信支付凭证", "付款凭证", "支付方式", "扣款成功", "交易明细", "查看账单", "查看详情",
+            "返回商家", "关闭", "确定", "返回", "商家小程序", "我的订单", "取餐号", "订单已完成"
         )
+    }
+
+    private fun extractAccountFromTexts(pkg: String, texts: List<String>): String? {
+        val joined = texts.joinToString(" ")
+        val banks = listOf(
+            "招商银行", "工商银行", "建设银行", "农业银行", "中国银行", "交通银行",
+            "平安银行", "中信银行", "浦发银行", "民生银行", "光大银行", "广发银行",
+            "兴业银行", "邮政储蓄", "微众银行", "网商银行"
+        )
+        for (b in banks) {
+            if (joined.contains(b)) {
+                return if (joined.contains("信用卡")) "$b(信用卡)" else b
+            }
+        }
+        if (joined.contains("信用卡")) {
+            return "信用卡"
+        }
+        if (pkg == "com.tencent.mm" && (joined.contains("零钱") || joined.contains("零钱通"))) {
+            return "微信零钱"
+        }
+        if (pkg == "com.eg.android.AlipayGphone" && (joined.contains("花呗") || joined.contains("花呗分期"))) {
+            return "花呗"
+        }
+        return null
     }
 
     private fun collectTexts(node: AccessibilityNodeInfo, list: MutableList<String>) {
@@ -388,7 +439,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
     // ====== 增强金额提取算法 ======
     private fun extractAmountFromList(texts: List<String>): Double? {
-        // 1. 带有货币符号的字符串 (如 "¥ 1.20", "¥1.20", "￥12.50")
+        // 1. 带有货币符号的字符串 (如 "¥ 1.20", "¥1.20", "￥12.50", "¥ -12.50", "-12.50")
         val regexSymbol = Regex("""[¥￥]\s*([0-9]+\.?[0-9]*)""")
         for (t in texts) {
             val m = regexSymbol.find(t)
@@ -401,7 +452,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         for (i in texts.indices) {
             val t = texts[i].trim()
             if ((t == "¥" || t == "￥") && i + 1 < texts.size) {
-                val nextStr = texts[i + 1].trim()
+                val nextStr = texts[i + 1].trim().removePrefix("-")
                 val v = nextStr.toDoubleOrNull()
                 if (v != null && v > 0) return v
             }
@@ -415,10 +466,11 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 if (v != null && v > 0) return v
             }
         }
-        // 4. 独立纯金额节点 (如 "1.20", "12.50")
+        // 4. 独立纯金额节点 (如 "1.20", "12.50", "128.00")
         for (t in texts) {
-            if (t.matches(Regex("""^[0-9]+\.[0-9]{2}$"""))) {
-                val v = t.toDoubleOrNull()
+            val cleaned = t.trim().removePrefix("-")
+            if (cleaned.matches(Regex("""^[0-9]+\.[0-9]{2}$"""))) {
+                val v = cleaned.toDoubleOrNull()
                 if (v != null && v > 0) return v
             }
         }
@@ -436,6 +488,12 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         val m2 = regexYuan.find(text)
         if (m2 != null) {
             val v = m2.groupValues[1].toDoubleOrNull()
+            if (v != null && v > 0) return v
+        }
+        val regexPure = Regex("""(?:支付|消费|扣款|转账|收款|到账|支出)?\s*([0-9]+\.[0-9]{2})\s*元?""")
+        val m3 = regexPure.find(text)
+        if (m3 != null) {
+            val v = m3.groupValues[1].toDoubleOrNull()
             if (v != null && v > 0) return v
         }
         return null
@@ -459,30 +517,50 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         return ""
     }
 
-    // ====== 增强商户名提取算法 ======
+    // ====== 工业级增强商户名提取算法 ======
     private fun extractMerchantFromList(texts: List<String>): String {
-        val targetLabels = listOf("收款商家", "收款方全称", "商户名称", "收款方", "商品", "收款人", "商户全称", "交易对象")
+        val targetLabels = listOf(
+            "收款商家", "收款方全称", "商户名称", "收款方", "商品", "收款人",
+            "商户全称", "交易对象", "商户", "店名", "商家", "特约商户"
+        )
+        // 1. 标签锚点法：查找“商户名称”、“收款方”之后的下一个有效文本
         for (i in texts.indices) {
             val t = texts[i].trim()
-            if (targetLabels.any { t.contains(it) }) {
-                if (i + 1 < texts.size) {
-                    val candidate = texts[i + 1].trim()
-                    if (candidate.isNotBlank() && !targetLabels.any { candidate.contains(it) } &&
-                        !candidate.startsWith("¥") && !candidate.startsWith("￥")) {
-                        return candidate
+            for (label in targetLabels) {
+                if (t == label || t == "$label:" || t == "$label：") {
+                    if (i + 1 < texts.size) {
+                        val candidate = texts[i + 1].trim()
+                        if (candidate.isNotBlank() && !isSystemWord(candidate) &&
+                            !candidate.startsWith("¥") && !candidate.startsWith("￥")) {
+                            return candidate
+                        }
+                    }
+                } else if (t.startsWith(label) && (t.contains(":") || t.contains("："))) {
+                    val clean = t.substringAfter(":").substringAfter("：").trim()
+                    if (clean.isNotBlank() && !isSystemWord(clean) && !clean.startsWith("¥") && !clean.startsWith("￥")) {
+                        return clean
                     }
                 }
             }
         }
 
-        // 启发式：紧邻金额上一项往往就是加粗的商户名
+        // 2. 启发式回溯：金额节点前 1~3 个节点通常是商户名或餐厅名
         for (i in texts.indices) {
-            val t = texts[i].trim()
-            if (t.matches(Regex("""^[¥￥]\s*[0-9]+(\.[0-9]{1,2})?$""")) || t.matches(Regex("""^[0-9]+\.[0-9]{2}$"""))) {
-                if (i > 0) {
-                    val prev = texts[i - 1].trim()
-                    if (prev.length in 2..30 && !isSystemWord(prev)) {
-                        return prev
+            val t = texts[i].trim().removePrefix("-")
+            val isAmount = t.matches(Regex("""^[¥￥]\s*[0-9]+(\.[0-9]{1,2})?$""")) ||
+                    t.matches(Regex("""^[0-9]+\.[0-9]{2}$""")) ||
+                    t.matches(Regex("""^[0-9]+\.?[0-9]*\s*元$"""))
+            if (isAmount) {
+                // 向上追溯 1~3 个元素，寻找最具商户特征的字符串（如“老四川饭馆”、“客如云点餐”、“喜茶GO”）
+                for (step in 1..3) {
+                    val prevIdx = i - step
+                    if (prevIdx >= 0) {
+                        val prev = texts[prevIdx].trim()
+                        if (prev.length in 2..32 && !isSystemWord(prev) &&
+                            !prev.startsWith("¥") && !prev.startsWith("￥") &&
+                            !prev.contains("支付") && !prev.contains("付款") && !prev.contains("详情")) {
+                            return prev
+                        }
                     }
                 }
             }
@@ -491,16 +569,22 @@ class AutoRecordAccessibilityService : AccessibilityService() {
     }
 
     private fun extractMerchantFromNotification(text: String): String {
-        val m1 = Regex("""向\s*(.*?)\s*(付款|转账|支付)""").find(text)
+        val m1 = Regex("""向\s*(.*?)\s*(付款|转账|支付|消费)""").find(text)
         if (m1 != null) {
             val name = m1.groupValues[1].trim()
             if (name.isNotEmpty() && !isSystemWord(name)) return name
         }
-        val m2 = Regex("""(收款方|收款商家|商户|收款人)[:：]\s*(.*?)\s*([￥¥0-9\s]|$)""").find(text)
+        val m2 = Regex("""(收款方|收款商家|商户|收款人|特约商户)[:：]\s*(.*?)\s*([￥¥0-9\s]|$)""").find(text)
         if (m2 != null) {
             val name = m2.groupValues[2].trim()
+            if (name.isNotEmpty() && !isSystemWord(name)) return name
+        }
+        val m3 = Regex("""在\s*(.*?)\s*(消费|支出|刷卡)""").find(text)
+        if (m3 != null) {
+            val name = m3.groupValues[1].trim()
             if (name.isNotEmpty() && !isSystemWord(name)) return name
         }
         return ""
     }
 }
+

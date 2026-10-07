@@ -277,7 +277,27 @@ fun AutoRecordScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // 测试按钮 4 (转账收款)
+                        // 测试按钮 4 (饭店微信信用卡/扫码点餐)
+                        OutlinedButton(
+                            onClick = {
+                                AutoRecordAccessibilityService.simulateAutoRecord(
+                                    context,
+                                    168.00,
+                                    "探鱼烤鱼(万象天地店)",
+                                    "招商银行(信用卡)"
+                                ) { cat ->
+                                    Toast.makeText(context, "⚡ 模拟成功！已自动记账: 招商银行(信用卡) ¥168.00 (商户: 探鱼烤鱼 · 分类: $cat)", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("🍲 模拟微信信用卡/点餐小程序 ¥168.00 (探鱼) -> 食")
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // 测试按钮 5 (转账收款)
                         OutlinedButton(
                             onClick = {
                                 AutoRecordAccessibilityService.simulateAutoRecord(

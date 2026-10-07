@@ -1,8 +1,8 @@
 {
-  "versionCode": 6,
-  "versionName": "1.0.5",
+  "versionCode": 7,
+  "versionName": "1.0.6",
   "releaseDate": "2026-10-07",
-  "changelog": "1. 修复流水卡片中#自动记账标签折行错位问题\n2. 新增微信转账收款（零钱存入）全自动入账功能\n3. 侧边栏与页面菜单更新为「我要查账」\n4. 账本管理升级：支持删除非默认账本，右上角支持预设一键恢复与自主定制添加\n5. 新增应用内原生极速下载与自动安装更新引擎",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.5/shubu-v1.0.5.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.5/shubu-v1.0.5.apk"
+  "changelog": "1. 核心记账引擎升级：全面攻克饭店微信信用卡支付、扫码枪反扫与特约商户点餐小程序无感记账\n2. 引入工业级深度回溯算法：自动穿透商户名与银行卡/信用卡来源，分类更智能\n3. 增强双通道熔断防重：通知栏与无障碍界面双重查重去重，杜绝漏记与重复\n4. 模拟测试面板新增饭店信用卡与点餐小程序一键测试",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.6/shubu-v1.0.6.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.6/shubu-v1.0.6.apk"
 }
