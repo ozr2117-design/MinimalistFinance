@@ -76,67 +76,72 @@ fun AboutScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             item {
-                Spacer(modifier = Modifier.height(10.dp))
-                Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Color(0xFF8B1E1E)),
-                    contentAlignment = Alignment.Center
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "數",
-                        color = Color(0xFFFFD700),
-                        fontSize = 44.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Spacer(modifier = Modifier.height(14.dp))
-                Text(text = "数簿", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textColor)
-                Text(text = "版本 1.0.5 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(Color(0xFF8B1E1E)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "數",
+                            color = Color(0xFFFFD700),
+                            fontSize = 44.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(text = "数簿", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textColor)
+                    Text(text = "版本 1.0.5 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
 
-                Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                // 检查更新按键 (Gitee 国内直连 / GitHub 备份镜像)
-                OutlinedButton(
-                    onClick = {
-                        if (isCheckingUpdate) return@OutlinedButton
-                        isCheckingUpdate = true
-                        coroutineScope.launch {
-                            val result = AppUpdateManager.checkUpdate(currentVersionCode = 6)
-                            isCheckingUpdate = false
-                            result.onSuccess { info ->
-                                if (info != null) {
-                                    updateInfo = info
-                                    showUpdateDialog = true
-                                } else {
-                                    Toast.makeText(context, "🎉 当前已是最新版本 (v1.0.5)", Toast.LENGTH_SHORT).show()
+                    // 检查更新按键 (Gitee 国内直连 / GitHub 备份镜像)
+                    OutlinedButton(
+                        onClick = {
+                            if (isCheckingUpdate) return@OutlinedButton
+                            isCheckingUpdate = true
+                            coroutineScope.launch {
+                                val result = AppUpdateManager.checkUpdate(currentVersionCode = 6)
+                                isCheckingUpdate = false
+                                result.onSuccess { info ->
+                                    if (info != null) {
+                                        updateInfo = info
+                                        showUpdateDialog = true
+                                    } else {
+                                        Toast.makeText(context, "🎉 当前已是最新版本 (v1.0.5)", Toast.LENGTH_SHORT).show()
+                                    }
+                                }.onFailure { err ->
+                                    Toast.makeText(context, "检查更新失败: ${err.message}", Toast.LENGTH_SHORT).show()
                                 }
-                            }.onFailure { err ->
-                                Toast.makeText(context, "检查更新失败: ${err.message}", Toast.LENGTH_SHORT).show()
                             }
+                        },
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, BlueAccent.copy(alpha = 0.5f))
+                    ) {
+                        if (isCheckingUpdate) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = BlueAccent
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = "正在检查更新...", fontSize = 13.sp, color = BlueAccent)
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                tint = BlueAccent,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = "检查新版本", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = BlueAccent)
                         }
-                    },
-                    shape = RoundedCornerShape(20.dp),
-                    border = BorderStroke(1.dp, BlueAccent.copy(alpha = 0.5f))
-                ) {
-                    if (isCheckingUpdate) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 2.dp,
-                            color = BlueAccent
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "正在检查更新...", fontSize = 13.sp, color = BlueAccent)
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.CloudDownload,
-                            contentDescription = null,
-                            tint = BlueAccent,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "检查新版本", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = BlueAccent)
                     }
                 }
             }
