@@ -3,6 +3,7 @@ package com.minimalist.finance.ui.screen
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import java.io.File
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -43,6 +44,9 @@ fun AboutScreen(
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
+    var isDownloadingUpdate by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableFloatStateOf(0f) }
+    var downloadProgressText by remember { mutableStateOf("") }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -197,7 +201,11 @@ fun AboutScreen(
     if (showUpdateDialog && updateInfo != null) {
         val info = updateInfo!!
         AlertDialog(
-            onDismissRequest = { showUpdateDialog = false },
+            onDismissRequest = {
+                if (!isDownloadingUpdate) {
+                    showUpdateDialog = false
+                }
+            },
             icon = {
                 Icon(
                     imageVector = Icons.Default.CloudDownload,
@@ -235,28 +243,97 @@ fun AboutScreen(
                         color = textColor.copy(alpha = 0.85f),
                         lineHeight = 18.sp
                     )
+
+                    // 下载进度条区域
+                    if (isDownloadingUpdate) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { downloadProgress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = BlueAccent
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "正在下载更新包...",
+                                fontSize = 12.sp,
+                                color = textSecondary
+                            )
+                            Text(
+                                text = downloadProgressText,
+                                fontSize = 12.sp,
+                                color = BlueAccent,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        showUpdateDialog = false
-                        try {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.downloadUrl)).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                            }
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "打开下载链接失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                if (isDownloadingUpdate) {
+                    TextButton(
+                        onClick = {
+                            isDownloadingUpdate = false
+                            showUpdateDialog = false
                         }
+                    ) {
+                        Text("后台运行 / 取消", color = textSecondary)
                     }
-                ) {
-                    Text("立即下载更新")
+                } else {
+                    Button(
+                        onClick = {
+                            isDownloadingUpdate = true
+                            downloadProgress = 0f
+                            downloadProgressText = "连接服务器..."
+                            coroutineScope.launch {
+                                val cacheFile = File(context.externalCacheDir ?: context.cacheDir, "shubu_update.apk")
+                                val result = AppUpdateManager.downloadApk(
+                                    primaryUrl = info.downloadUrl,
+                                    backupUrl = info.backupDownloadUrl,
+                                    targetFile = cacheFile,
+                                    onProgress = { current, total ->
+                                        if (total > 0) {
+                                            downloadProgress = current.toFloat() / total
+                                            val currentMb = String.format("%.1f", current / (1024f * 1024f))
+                                            val totalMb = String.format("%.1f", total / (1024f * 1024f))
+                                            val pct = (downloadProgress * 100).toInt()
+                                            downloadProgressText = "$currentMb / $totalMb MB ($pct%)"
+                                        } else {
+                                            val currentMb = String.format("%.1f", current / (1024f * 1024f))
+                                            downloadProgressText = "已下载 $currentMb MB"
+                                        }
+                                    }
+                                )
+                                isDownloadingUpdate = false
+                                result.onSuccess { apkFile ->
+                                    showUpdateDialog = false
+                                    AppUpdateManager.installApk(context, apkFile)
+                                }.onFailure { err ->
+                                    Toast.makeText(context, "应用内下载失败: ${err.message}，正在尝试跳转浏览器", Toast.LENGTH_LONG).show()
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.downloadUrl)).apply {
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {}
+                                }
+                            }
+                        }
+                    ) {
+                        Text("立即在应用内更新")
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showUpdateDialog = false }) {
-                    Text("稍后再说")
+                if (!isDownloadingUpdate) {
+                    TextButton(onClick = { showUpdateDialog = false }) {
+                        Text("稍后再说")
+                    }
                 }
             }
         )

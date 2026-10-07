@@ -1,8 +1,16 @@
 package com.minimalist.finance.util
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -44,6 +52,114 @@ object AppUpdateManager {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    suspend fun downloadApk(
+        primaryUrl: String,
+        backupUrl: String,
+        targetFile: File,
+        onProgress: (bytesDownloaded: Long, totalBytes: Long) -> Unit
+    ): Result<File> = withContext(Dispatchers.IO) {
+        val urls = listOfNotNull(
+            primaryUrl.takeIf { it.isNotBlank() },
+            backupUrl.takeIf { it.isNotBlank() }
+        )
+
+        var lastError: Exception? = null
+        for (url in urls) {
+            try {
+                if (downloadToFile(url, targetFile, onProgress)) {
+                    return@withContext Result.success(targetFile)
+                }
+            } catch (e: Exception) {
+                lastError = e
+            }
+        }
+        Result.failure(lastError ?: Exception("下载更新安装包失败"))
+    }
+
+    private fun downloadToFile(
+        urlStr: String,
+        targetFile: File,
+        onProgress: (bytesDownloaded: Long, totalBytes: Long) -> Unit
+    ): Boolean {
+        var currentUrl = urlStr
+        var conn: HttpURLConnection? = null
+        var redirects = 0
+
+        while (redirects < 5) {
+            val url = URL(currentUrl)
+            conn = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15000
+                readTimeout = 30000
+                instanceFollowRedirects = false
+                setRequestProperty("User-Agent", "Shubu-Android-App")
+            }
+            val code = conn.responseCode
+            if (code in 300..399) {
+                val newLocation = conn.getHeaderField("Location") ?: return false
+                currentUrl = newLocation
+                conn.disconnect()
+                redirects++
+            } else if (code == 200) {
+                break
+            } else {
+                conn.disconnect()
+                return false
+            }
+        }
+
+        val connection = conn ?: return false
+        val totalBytes = connection.contentLengthLong
+
+        targetFile.parentFile?.mkdirs()
+        if (targetFile.exists()) targetFile.delete()
+
+        connection.inputStream.use { input ->
+            FileOutputStream(targetFile).use { output ->
+                val buffer = ByteArray(8 * 1024)
+                var bytesRead: Int
+                var downloaded: Long = 0
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
+                    downloaded += bytesRead
+                    onProgress(downloaded, totalBytes)
+                }
+                output.flush()
+            }
+        }
+        return targetFile.exists() && targetFile.length() > 0
+    }
+
+    fun installApk(context: Context, apkFile: File) {
+        if (!apkFile.exists()) return
+
+        // Android 8.0+ 检查未知来源安装权限
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val hasPermission = context.packageManager.canRequestPackageInstalls()
+            if (!hasPermission) {
+                val manageIntent = Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:${context.packageName}")
+                ).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(manageIntent)
+                return
+            }
+        }
+
+        val apkUri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            apkFile
+        )
+
+        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(apkUri, "application/vnd.android.package-archive")
+            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(installIntent)
     }
 
     private fun fetchUrl(urlStr: String): String? {
