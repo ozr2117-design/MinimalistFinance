@@ -99,7 +99,8 @@ fun AboutScreen(
                     }
                     Spacer(modifier = Modifier.height(14.dp))
                     Text(text = "数簿", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textColor)
-                    Text(text = "版本 1.0.5 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
+                    val currentVersionName = remember { AppUpdateManager.getAppVersionName(context) }
+                    Text(text = "版本 $currentVersionName 正式版 (Release)", fontSize = 13.sp, color = textSecondary)
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -109,14 +110,14 @@ fun AboutScreen(
                             if (isCheckingUpdate) return@OutlinedButton
                             isCheckingUpdate = true
                             coroutineScope.launch {
-                                val result = AppUpdateManager.checkUpdate(currentVersionCode = 6)
+                                val result = AppUpdateManager.checkUpdate(context)
                                 isCheckingUpdate = false
                                 result.onSuccess { info ->
                                     if (info != null) {
                                         updateInfo = info
                                         showUpdateDialog = true
                                     } else {
-                                        Toast.makeText(context, "🎉 当前已是最新版本 (v1.0.5)", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "🎉 当前已是最新版本 (v$currentVersionName)", Toast.LENGTH_SHORT).show()
                                     }
                                 }.onFailure { err ->
                                     Toast.makeText(context, "检查更新失败: ${err.message}", Toast.LENGTH_SHORT).show()

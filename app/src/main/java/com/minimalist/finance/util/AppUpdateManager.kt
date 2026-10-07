@@ -24,8 +24,34 @@ data class AppUpdateInfo(
 )
 
 object AppUpdateManager {
-    const val CURRENT_VERSION_CODE = 6
-    const val CURRENT_VERSION_NAME = "1.0.5"
+    /**
+     * 动态读取系统已安装 App 的真实 versionCode，彻底杜绝硬编码死循环
+     */
+    fun getAppVersionCode(context: Context): Int {
+        return try {
+            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                pInfo.longVersionCode.toInt()
+            } else {
+                @Suppress("DEPRECATION")
+                pInfo.versionCode
+            }
+        } catch (_: Exception) {
+            7 // 兜底返回最新版本号
+        }
+    }
+
+    /**
+     * 动态读取系统已安装 App 的真实 versionName
+     */
+    fun getAppVersionName(context: Context): String {
+        return try {
+            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            pInfo.versionName ?: "1.0.6"
+        } catch (_: Exception) {
+            "1.0.6"
+        }
+    }
 
     // 优先通过 Gitee 国内直连（免代理、零阻断、极速可用）
     private const val GITEE_URL = "https://gitee.com/ozr2117/MinimalistFinance/raw/main/version.json"
@@ -43,6 +69,11 @@ object AppUpdateManager {
     fun recordRemindLater(context: Context) {
         val prefs = context.getSharedPreferences("app_update_prefs", Context.MODE_PRIVATE)
         prefs.edit().putLong("last_remind_time", System.currentTimeMillis()).apply()
+    }
+
+    suspend fun checkUpdate(context: Context): Result<AppUpdateInfo?> {
+        val currentCode = getAppVersionCode(context)
+        return checkUpdate(currentCode)
     }
 
     suspend fun checkUpdate(currentVersionCode: Int): Result<AppUpdateInfo?> = withContext(Dispatchers.IO) {

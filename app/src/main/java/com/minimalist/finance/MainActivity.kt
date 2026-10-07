@@ -36,7 +36,7 @@ class MainActivity : ComponentActivity() {
                 // 启动无感静默检查更新（带 24 小时防骚扰频控）
                 LaunchedEffect(Unit) {
                     if (AppUpdateManager.shouldCheckAutoUpdate(this@MainActivity)) {
-                        val result = AppUpdateManager.checkUpdate(AppUpdateManager.CURRENT_VERSION_CODE)
+                        val result = AppUpdateManager.checkUpdate(this@MainActivity)
                         result.onSuccess { info ->
                             if (info != null) {
                                 autoUpdateInfo = info
