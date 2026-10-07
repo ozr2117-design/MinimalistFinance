@@ -3,6 +3,7 @@ name: Build Android APK
 on:
   push:
     branches: [ "main", "master" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
@@ -10,6 +11,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout source code
@@ -27,7 +30,9 @@ jobs:
         gradle-version: '8.10.2'
 
     - name: Build Android APKs (Release & Debug)
-      run: gradle assembleRelease assembleDebug --stacktrace
+      run: |
+        gradle assembleRelease assembleDebug --stacktrace
+        cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/shubu-v1.0.6.apk || true
 
     - name: Upload Release APK (Signed for App Stores)
       uses: actions/upload-artifact@v4
@@ -48,3 +53,4 @@ jobs:
         files: |
           app/build/outputs/apk/release/*.apk
           app/build/outputs/apk/debug/*.apk
+
