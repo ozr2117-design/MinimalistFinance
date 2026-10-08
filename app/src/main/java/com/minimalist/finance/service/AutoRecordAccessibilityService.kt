@@ -71,7 +71,62 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         fun setKeepAliveEnabled(context: Context, enabled: Boolean) {
             val sp = context.getSharedPreferences("auto_record_prefs", Context.MODE_PRIVATE)
             sp.edit().putBoolean("auto_record_keep_alive", enabled).apply()
+            if (enabled) {
+                updateKeepAliveNotification(context)
+            } else {
+                cancelKeepAliveNotification(context)
+            }
         }
+
+        fun updateKeepAliveNotification(context: Context) {
+            if (!isKeepAliveEnabled(context)) {
+                cancelKeepAliveNotification(context)
+                return
+            }
+            try {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val channel = NotificationChannel(
+                        CHANNEL_ID,
+                        "数簿自动记账守护服务",
+                        NotificationManager.IMPORTANCE_DEFAULT
+                    ).apply {
+                        description = "常驻通知用于防止后台记账服务被手机省电策略意外休眠"
+                        setShowBadge(false)
+                        enableVibration(false)
+                        setSound(null, null)
+                    }
+                    nm.createNotificationChannel(channel)
+                }
+
+                val intent = Intent(context, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val pendingIntent = PendingIntent.getActivity(
+                    context, 0, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+                )
+
+                val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("数簿已就绪 · 自动记账守护中")
+                    .setContentText("实时监测微信/支付宝支付成功与停车账单凭证")
+                    .setContentIntent(pendingIntent)
+                    .setOngoing(true)
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .build()
+
+                nm.notify(NOTIFICATION_ID, notification)
+            } catch (_: Exception) {}
+        }
+
+        fun cancelKeepAliveNotification(context: Context) {
+            try {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                nm?.cancel(NOTIFICATION_ID)
+            } catch (_: Exception) {}
+        }
+
 
         /**
          * 模拟测试公共接口 (支持支出与收入)
@@ -173,65 +228,19 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             serviceInfo = info
         } catch (_: Exception) {}
 
-        updateKeepAliveNotification()
+        updateKeepAliveNotification(this)
     }
 
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
-        cancelKeepAliveNotification()
+        cancelKeepAliveNotification(this)
     }
 
     override fun onInterrupt() {
         isServiceRunning = false
     }
 
-    fun updateKeepAliveNotification() {
-        if (!isKeepAliveEnabled(this)) {
-            cancelKeepAliveNotification()
-            return
-        }
-        try {
-            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val channel = NotificationChannel(
-                    CHANNEL_ID,
-                    "数簿自动记账守护服务",
-                    NotificationManager.IMPORTANCE_LOW
-                ).apply {
-                    description = "常驻通知用于防止后台记账服务被手机省电策略意外休眠"
-                    setShowBadge(false)
-                }
-                nm.createNotificationChannel(channel)
-            }
-
-            val intent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                this, 0, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-            )
-
-            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle("数簿已就绪 · 自动记账守护中")
-                .setContentText("实时监测微信/支付宝支付成功与停车账单凭证")
-                .setContentIntent(pendingIntent)
-                .setOngoing(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .build()
-
-            nm.notify(NOTIFICATION_ID, notification)
-        } catch (_: Exception) {}
-    }
-
-    fun cancelKeepAliveNotification() {
-        try {
-            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-            nm?.cancel(NOTIFICATION_ID)
-        } catch (_: Exception) {}
-    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return

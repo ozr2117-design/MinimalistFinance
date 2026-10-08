@@ -26,6 +26,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.os.Build
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import com.minimalist.finance.service.AutoRecordAccessibilityService
 import com.minimalist.finance.ui.theme.*
 import com.minimalist.finance.ui.viewmodel.MainViewModel
@@ -51,8 +56,22 @@ fun AutoRecordScreen(
     var autoRecordEnabled by remember { mutableStateOf(AutoRecordAccessibilityService.isEnabled(context)) }
     var keepAliveEnabled by remember { mutableStateOf(AutoRecordAccessibilityService.isKeepAliveEnabled(context)) }
 
-    // 周期性轮询刷新真实运行状态
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            AutoRecordAccessibilityService.setKeepAliveEnabled(context, true)
+            Toast.makeText(context, "通知权限已获取，常驻守护已启动", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "请允许通知权限以展示常驻守护通知", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // 周期性轮询刷新真实运行状态并确保常驻通知生效
     LaunchedEffect(Unit) {
+        if (keepAliveEnabled) {
+            AutoRecordAccessibilityService.updateKeepAliveNotification(context)
+        }
         while (true) {
             isAccessibilityOn = checkAccessibilityEnabled(context)
             isOverlayOn = checkOverlayEnabled(context)
@@ -61,6 +80,7 @@ fun AutoRecordScreen(
             kotlinx.coroutines.delay(2000L)
         }
     }
+
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -212,14 +232,23 @@ fun AutoRecordScreen(
                         }
                         Switch(
                             checked = keepAliveEnabled,
-                            onCheckedChange = {
-                                keepAliveEnabled = it
-                                AutoRecordAccessibilityService.setKeepAliveEnabled(context, it)
-                                if (isEngineRunning) {
-                                    Toast.makeText(context, if (it) "已开启常驻通知守护" else "已关闭常驻通知", Toast.LENGTH_SHORT).show()
+                            onCheckedChange = { isChecked ->
+                                keepAliveEnabled = isChecked
+                                if (isChecked) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                        ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        AutoRecordAccessibilityService.setKeepAliveEnabled(context, true)
+                                        Toast.makeText(context, "已开启常驻通知守护", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    AutoRecordAccessibilityService.setKeepAliveEnabled(context, false)
+                                    Toast.makeText(context, "已关闭常驻通知", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         )
+
                     }
                 }
             }
