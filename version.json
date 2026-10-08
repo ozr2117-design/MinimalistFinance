@@ -1,8 +1,8 @@
 {
-  "versionCode": 10,
-  "versionName": "1.0.9",
+  "versionCode": 11,
+  "versionName": "1.1.0",
   "releaseDate": "2026-10-08",
-  "changelog": "1. 彻底根除美团/外卖点餐选菜提前记账 Bug：引入前置否定锚点黑名单（提交订单/去支付/去结算/选好了/加一份/待付款等坚决拦截）\n2. 电商外卖应用严格准入过滤：在美团/京东/饿了么内仅允许全屏已支付成功页面触发，绝不碰选餐、加购、收银台等前置流程\n3. 剔除模糊语义触发规则，杜绝任何未付先记误触\n4. 支持在搜索/明细列表中一键删除误记的流水",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.9/shubu-v1.0.9.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.9/shubu-v1.0.9.apk"
+  "changelog": "1. 彻底根除微信/支付宝重复记账：引入唯一交易单号终身排重机制（已记录单号终身拦截不重记）\n2. 防重保护窗口大幅升级：内存与数据库防重从60秒延长至10分钟，全局并发防重扩大至2分钟\n3. 历史账单智能防误触：自动识别微信/支付宝内置账单时间，凡超过5分钟的历史旧账查阅坚决拦截不触发\n4. 支持在「我要查账」中快捷点击垃圾桶一键删除误记的记录",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.0/shubu-v1.1.0.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.0/shubu-v1.1.0.apk"
 }

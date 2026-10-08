@@ -45,10 +45,13 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         var lastRecordLog: String = ""
         var lastRecordTime: Long = 0L
 
-        // 内存级 60 秒强力防重缓存：key -> 触发时间戳
+        // 内存级 10 分钟强力防重缓存：key -> 触发时间戳
         private val dedupeCache = ConcurrentHashMap<String, Long>()
+        // 订单交易单号强力防重缓存：orderId -> 触发时间戳
+        private val orderDedupeCache = ConcurrentHashMap<String, Long>()
         private var lastGlobalTime = 0L
         private var lastGlobalAmount = 0.0
+
 
         private const val CHANNEL_ID = "auto_record_service_channel"
         private const val NOTIFICATION_ID = 8888
@@ -459,16 +462,20 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         // 提取支付账户（如零钱通、微信零钱、具体信用卡等）
         val detectedAccount = extractAccountFromTexts(pkg, texts)
 
+        // 提取唯一交易单号与订单时间（用于彻底杜绝二次触发与过滤历史旧账单）
+        val orderId = extractOrderIdFromTexts(texts)
+        val billTimestamp = extractBillTimestamp(texts)
+
         val partyName = if (targetType == TransactionType.INCOME) {
             extractIncomeSourceFromList(texts)
         } else {
             extractMerchantFromList(texts)
         }
-        saveAutoRecord(pkg, amount, partyName, joined, targetType, detectedAccount)
+        saveAutoRecord(pkg, amount, partyName, joined, targetType, detectedAccount, orderId, billTimestamp)
     }
 
     /**
-     * 统一安全入库逻辑（核心双重熔断防重机制）
+     * 统一安全入库逻辑（核心多层熔断与订单单号终身排重机制）
      */
     private fun saveAutoRecord(
         pkg: String,
@@ -476,20 +483,34 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         partyName: String,
         rawContext: String,
         type: TransactionType = TransactionType.EXPENSE,
-        customAccount: String? = null
+        customAccount: String? = null,
+        orderId: String? = null,
+        billTimestamp: Long? = null
     ) {
         val now = System.currentTimeMillis()
 
-        // 1. 内存级防重检查：同一类型同一金额在 60 秒内严格只记一次
+        // 1. 唯一订单号内存拦截：只要该微信/支付宝单号在内存中记录过，绝对直接拦截
+        if (!orderId.isNullOrBlank()) {
+            val lastSeenOrder = orderDedupeCache[orderId] ?: 0L
+            if (lastSeenOrder > 0L) {
+                return
+            }
+        }
+
+        // 2. 内存级 10 分钟 (600秒) 强力防重检查：同一应用同一类型同一金额 10 分钟内严格只记一次
         val cacheKey = "$pkg-${type.name}-${String.format(java.util.Locale.US, "%.2f", amount)}"
         val lastSeen = dedupeCache[cacheKey] ?: 0L
-        if (now - lastSeen < 60_000L) {
-            // 内存命中，直接熔断拦截
+        if (now - lastSeen < 600_000L) {
             return
         }
 
-        // 全局时间防重：15秒内同金额同类型坚决不触发
-        if (now - lastGlobalTime < 15_000L && Math.abs(lastGlobalAmount - amount) < 0.001) {
+        // 3. 全局时间防重：2分钟 (120秒) 内全系统同金额同类型坚决不重复触发
+        if (now - lastGlobalTime < 120_000L && Math.abs(lastGlobalAmount - amount) < 0.001) {
+            return
+        }
+
+        // 4. 历史旧账单查阅拦截：若单据自带的时间早于当前系统时间 5 分钟以上，说明用户只是在查账/翻阅往期凭证！
+        if (billTimestamp != null && now - billTimestamp > 300_000L) {
             return
         }
 
@@ -510,6 +531,9 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
         // 刷新内存去重戳
         dedupeCache[cacheKey] = now
+        if (!orderId.isNullOrBlank()) {
+            orderDedupeCache[orderId] = now
+        }
         lastGlobalTime = now
         lastGlobalAmount = amount
 
@@ -519,12 +543,27 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         scope.launch {
             val db = AppDatabase.getDatabase(applicationContext, scope)
 
-            // 2. 数据库底层熔断防重：检查数据库内近 60 秒是否存在相同金额相同类型的记账
-            val recentDupCount = db.recordDao().getRecentDuplicateCount(amount, type, now - 60_000L)
+            // 5. 数据库订单号终身排重：若数据库中已经存过这个微信/支付宝交易单号，绝对不再记！
+            if (!orderId.isNullOrBlank()) {
+                val existingCount = db.recordDao().getRecordCountByOrderId(orderId)
+                if (existingCount > 0) {
+                    return@launch
+                }
+            }
+
+            // 6. 数据库底层熔断防重：检查数据库内近 10 分钟 (600秒) 是否存在相同金额相同类型的记账
+            val recentDupCount = db.recordDao().getRecentDuplicateCount(amount, type, now - 600_000L)
             if (recentDupCount > 0) {
-                // 数据库底层已存在同金额记录，放弃重复插入！
                 return@launch
             }
+
+            val remarkText = if (!orderId.isNullOrBlank()) {
+                "自动记账: $displayName [单号:$orderId]"
+            } else {
+                "自动记账: $displayName"
+            }
+
+            val finalTimestamp = billTimestamp ?: now
 
             val record = Record(
                 bookId = 1L, // 统一记入日常主账本
@@ -532,9 +571,9 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 amount = amount,
                 categoryName = catName,
                 accountName = accountName,
-                remark = "自动记账: $displayName",
+                remark = remarkText,
                 tag = "自动记账",
-                timestamp = now
+                timestamp = finalTimestamp
             )
             db.recordDao().insertRecord(record)
 
@@ -556,11 +595,59 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         val iterator = dedupeCache.entries.iterator()
         while (iterator.hasNext()) {
             val entry = iterator.next()
-            if (now - entry.value > 120_000L) {
+            if (now - entry.value > 1200_000L) { // 20分钟清理
                 iterator.remove()
             }
         }
+        val orderIterator = orderDedupeCache.entries.iterator()
+        while (orderIterator.hasNext()) {
+            val entry = orderIterator.next()
+            if (now - entry.value > 86400_000L) { // 24小时清理
+                orderIterator.remove()
+            }
+        }
     }
+
+    private fun extractOrderIdFromTexts(texts: List<String>): String? {
+        val labels = listOf("交易单号", "商户单号", "订单号", "交易号", "支付单号")
+        for (i in texts.indices) {
+            val t = texts[i].trim()
+            for (label in labels) {
+                if (t == label || t == "$label:" || t == "$label：") {
+                    if (i + 1 < texts.size) {
+                        val candidate = texts[i + 1].trim()
+                        if (candidate.matches(Regex("""^[A-Za-z0-9_]{8,40}$"""))) {
+                            return candidate
+                        }
+                    }
+                } else if (t.startsWith(label) && (t.contains(":") || t.contains("："))) {
+                    val clean = t.substringAfter(":").substringAfter("：").trim()
+                    if (clean.matches(Regex("""^[A-Za-z0-9_]{8,40}$"""))) {
+                        return clean
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    private fun extractBillTimestamp(texts: List<String>): Long? {
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.CHINA)
+        val sdfShort = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA)
+        val regex = Regex("""202[0-9]-[0-1][0-9]-[0-3][0-9]\s+[0-2][0-9]:[0-5][0-9](?::[0-5][0-9])?""")
+        for (t in texts) {
+            val m = regex.find(t)
+            if (m != null) {
+                val str = m.value.trim()
+                try {
+                    val date = if (str.length > 16) sdf.parse(str) else sdfShort.parse(str)
+                    if (date != null) return date.time
+                } catch (_: Exception) {}
+            }
+        }
+        return null
+    }
+
 
     private fun isSystemWord(word: String): Boolean {
         val cleaned = word.trim()

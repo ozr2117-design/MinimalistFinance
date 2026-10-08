@@ -101,7 +101,11 @@ interface RecordDao {
 
     @Query("SELECT COUNT(*) FROM records WHERE amount = :amount AND type = :type AND timestamp >= :sinceTimestamp")
     suspend fun getRecentDuplicateCount(amount: Double, type: TransactionType, sinceTimestamp: Long): Int
+
+    @Query("SELECT COUNT(*) FROM records WHERE remark LIKE '%' || :orderId || '%'")
+    suspend fun getRecordCountByOrderId(orderId: String): Int
 }
+
 
 @Dao
 interface PeriodicRuleDao {
