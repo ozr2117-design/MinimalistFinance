@@ -25,3 +25,4 @@ val CoralRed = Color(0xFFFF5C5C)    // 支出主色调
 val MintGreen = Color(0xFF10B981)   // 收入主色调
 val TechBlue = Color(0xFF0EA5E9)    // 转账主色调
 val BlueAccent = Color(0xFF3B82F6)  // 选中强调色
+val WarmOrange = Color(0xFFF59E0B)  // 警示/提示暖橙色
