@@ -364,9 +364,36 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
         val joined = texts.joinToString(" ")
 
-        // 防误触：微信主界面（包含“通讯录”、“发现”、“我”导航栏）坚决不触碰
+        // 核心防误触 1：微信主界面（包含“通讯录”、“发现”、“我”导航栏）坚决不触碰
         if (pkg == "com.tencent.mm") {
             if (texts.contains("通讯录") && texts.contains("发现") && texts.contains("我")) {
+                return
+            }
+        }
+
+        // 核心防误触 2：绝对拦截所有待支付 / 结算中 / 选餐购物车 / 选规格 / 收银台未付款页面
+        val prePaymentKeywords = listOf(
+            "提交订单", "去支付", "立即支付", "立即付款", "确认付款", "确认支付", "待付款", "待支付",
+            "未支付", "去结算", "立即购买", "去买单", "选择支付方式", "找人付", "去拼单",
+            "确认订单", "还需支付", "放弃支付", "继续支付", "确认下单", "去凑单", "加入购物车",
+            "选好了", "选择优惠券", "请输入支付密码", "验证支付密码", "指纹验证", "还差",
+            "起送", "另需配送费", "外卖专享", "差￥", "差¥", "加一份", "去结算("
+        )
+        if (prePaymentKeywords.any { joined.contains(it) }) {
+            return
+        }
+
+        // 核心防误触 3：美团、外卖、京东、饿了么等电商 App 极度严格过滤
+        val isShoppingApp = pkg in listOf(
+            "com.sankuai.meituan",
+            "com.sankuai.meituan.takeoutnew",
+            "com.jingdong.app.mall",
+            "me.ele"
+        )
+        if (isShoppingApp) {
+            // 在外卖/电商 App 内，只有当明确展示全屏“支付成功”或“付款成功”，且绝无待付款字样时才允许触发
+            val hasStrictShoppingSuccess = joined.contains("支付成功") || joined.contains("付款成功")
+            if (!hasStrictShoppingSuccess) {
                 return
             }
         }
@@ -386,7 +413,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 (joined.contains("微信转账") && joined.contains("已收款")) ||
                 (joined.contains("转账时间") && joined.contains("收款时间"))
 
-        // 2. 支付/扣款成功语义判定 (支出 - 覆盖停车缴费、微信凭证、账单详情、小程序、信用卡)
+        // 2. 支付/扣款成功语义判定 (支出 - 必须有明确的已完成/已扣款成功标志，彻底剔除模糊词)
         val isExpense = joined.contains("支付成功") ||
                 joined.contains("付款成功") ||
                 joined.contains("交易成功") ||
@@ -396,31 +423,28 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 joined.contains("扫码付款成功") ||
                 joined.contains("成功付款") ||
                 joined.contains("向商家付款成功") ||
-                joined.contains("支付明细") ||
-                joined.contains("账单详情") ||
-                joined.contains("全部账单") ||
+                (joined.contains("支付明细") && (joined.contains("完成") || joined.contains("成功"))) ||
+                (joined.contains("账单详情") && (joined.contains("支付成功") || joined.contains("扣款成功"))) ||
+                (joined.contains("全部账单") && (joined.contains("支付成功") || joined.contains("扣款成功"))) ||
                 // 停车场景与缴费场景
-                joined.contains("支付停车费") ||
-                joined.contains("停车缴费") ||
-                joined.contains("停车费") ||
+                (joined.contains("支付停车费") && (joined.contains("支付成功") || joined.contains("凭证") || joined.contains("道闸已抬起"))) ||
+                (joined.contains("停车缴费") && (joined.contains("成功") || joined.contains("完成") || joined.contains("凭证"))) ||
                 joined.contains("缴费成功") ||
                 joined.contains("扣费成功") ||
                 joined.contains("已缴费") ||
-                joined.contains("神州路通") ||
-                joined.contains("捷停车") ||
-                // 饭店扫码点餐小程序 / 信用卡快捷付常见完成文案
-                joined.contains("下单成功") ||
-                joined.contains("取餐号") ||
-                joined.contains("订单已完成") ||
-                joined.contains("订单已支付") ||
-                (joined.contains("支付方式") && (joined.contains("零钱通") || joined.contains("零钱") || joined.contains("信用卡") || joined.contains("借记卡") || joined.contains("招商银行") || joined.contains("工商银行") || joined.contains("建设银行") || joined.contains("农业银行") || joined.contains("中国银行") || joined.contains("交通银行") || joined.contains("平安银行") || joined.contains("中信银行") || joined.contains("浦发银行") || joined.contains("民生银行") || joined.contains("光大银行") || joined.contains("广发银行") || joined.contains("兴业银行") || joined.contains("邮政储蓄"))) ||
-                // 聚合商户 / 商家小程序
-                (joined.contains("特约商户") && (joined.contains("扣款") || joined.contains("消费") || joined.contains("交易"))) ||
-                (joined.contains("微信支付") && (joined.contains("已扣款") || joined.contains("已支付") || joined.contains("消费成功"))) ||
+                // 饭店扫码点餐小程序
+                (joined.contains("下单成功") && !joined.contains("待支付")) ||
+                (joined.contains("取餐号") && !joined.contains("去支付")) ||
+                (joined.contains("订单已完成") && !joined.contains("待付款")) ||
+                (joined.contains("订单已支付") && !joined.contains("去结算")) ||
+                // 聚合商户 / 商家小程序 (必须有已扣款或支付成功字样)
+                (joined.contains("特约商户") && (joined.contains("已扣款") || joined.contains("支付成功") || joined.contains("交易成功"))) ||
+                (joined.contains("微信支付") && (joined.contains("已扣款") || joined.contains("已支付") || joined.contains("消费成功") || joined.contains("凭证"))) ||
                 // 银联云闪付 / 银行 App
                 joined.contains("扣款成功") ||
                 joined.contains("刷卡成功") ||
                 joined.contains("银联付款成功")
+
 
         val targetType = when {
             isIncome -> TransactionType.INCOME

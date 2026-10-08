@@ -1,8 +1,8 @@
 {
-  "versionCode": 9,
-  "versionName": "1.0.8",
+  "versionCode": 10,
+  "versionName": "1.0.9",
   "releaseDate": "2026-10-08",
-  "changelog": "1. 常驻通知栏守护即开即显：修复开启常驻开关未立即推送通知的问题，适配 Android 13+ 运行时通知权限动态获取\n2. 提升通知通道为常驻默认通道：彻底防止通知被小米澎湃/华为/OPPO折叠至静默列表，常驻守护一目了然\n3. 微信停车费与支付凭证全覆盖：攻克神州路通/捷停车等停车缴费场景，精准提取负数金额（如 -4.00）、商户全称与车牌说明\n4. 核心引擎实时心跳诊断：实时感知无障碍真实活跃状态，杜绝后台假死",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.8/shubu-v1.0.8.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.8/shubu-v1.0.8.apk"
+  "changelog": "1. 彻底根除美团/外卖点餐选菜提前记账 Bug：引入前置否定锚点黑名单（提交订单/去支付/去结算/选好了/加一份/待付款等坚决拦截）\n2. 电商外卖应用严格准入过滤：在美团/京东/饿了么内仅允许全屏已支付成功页面触发，绝不碰选餐、加购、收银台等前置流程\n3. 剔除模糊语义触发规则，杜绝任何未付先记误触\n4. 支持在搜索/明细列表中一键删除误记的流水",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.9/shubu-v1.0.9.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.9/shubu-v1.0.9.apk"
 }
