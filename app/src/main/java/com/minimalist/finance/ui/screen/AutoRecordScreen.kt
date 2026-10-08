@@ -8,7 +8,6 @@ import android.provider.Settings
 import android.text.TextUtils
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -43,11 +42,25 @@ fun AutoRecordScreen(
     val textSecondary = if (isDark) DarkTextSecondary else LightTextSecondary
     val cardBg = if (isDark) DarkSurfaceCard else LightSurfaceCard
 
-    // 检查权限状态
+    // 检查权限与运行状态
     var isAccessibilityOn by remember { mutableStateOf(checkAccessibilityEnabled(context)) }
     var isOverlayOn by remember { mutableStateOf(checkOverlayEnabled(context)) }
     var isBatteryIgnored by remember { mutableStateOf(checkBatteryIgnored(context)) }
-    var autoRecordEnabled by remember { mutableStateOf(true) }
+    var isEngineRunning by remember { mutableStateOf(AutoRecordAccessibilityService.isServiceRunning) }
+
+    var autoRecordEnabled by remember { mutableStateOf(AutoRecordAccessibilityService.isEnabled(context)) }
+    var keepAliveEnabled by remember { mutableStateOf(AutoRecordAccessibilityService.isKeepAliveEnabled(context)) }
+
+    // 周期性轮询刷新真实运行状态
+    LaunchedEffect(Unit) {
+        while (true) {
+            isAccessibilityOn = checkAccessibilityEnabled(context)
+            isOverlayOn = checkOverlayEnabled(context)
+            isBatteryIgnored = checkBatteryIgnored(context)
+            isEngineRunning = AutoRecordAccessibilityService.isServiceRunning
+            kotlinx.coroutines.delay(2000L)
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -77,9 +90,70 @@ fun AutoRecordScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // 核心总开关卡片
+            // 🌟 1. 核心运行状态诊断指示牌
+            item {
+                val (statusColor, statusTitle, statusSubtitle) = when {
+                    isAccessibilityOn && isEngineRunning -> Triple(
+                        MintGreen,
+                        "🟢 记账核心引擎正常运行中",
+                        "后台心跳正常 · 实时监听微信支付凭证、停车缴费与支付宝账单"
+                    )
+                    isAccessibilityOn && !isEngineRunning -> Triple(
+                        WarmOrange,
+                        "🟠 权限已开启，但服务未建立连接 (假死/休眠)",
+                        "国产手机省电策略可能已将无障碍后台冻结。请点击右侧「重启服务」，在系统设置中先关闭再重新开启数簿即可唤醒！"
+                    )
+                    else -> Triple(
+                        CoralRed,
+                        "🔴 自动记账服务尚未开启",
+                        "无障碍权限尚未授予，请参照下方三步法完成开启以激活自动记账。"
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(cardBg)
+                        .padding(16.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = statusTitle,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = statusColor
+                            )
+                            if (isAccessibilityOn && !isEngineRunning) {
+                                TextButton(
+                                    onClick = {
+                                        openAccessibilitySettings(context)
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("重启服务 >", color = BlueAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = statusSubtitle,
+                            fontSize = 12.sp,
+                            color = textSecondary,
+                            lineHeight = 17.sp
+                        )
+                    }
+                }
+            }
+
+            // ⚡ 2. 核心总开关卡片 (带持久化)
             item {
                 Box(
                     modifier = Modifier
@@ -100,11 +174,79 @@ fun AutoRecordScreen(
                                 Text(text = "无感自动记账", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = textColor)
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = "在微信、支付宝或云闪付付款成功后，自动提取金额并极速记入日常账本。", fontSize = 12.sp, color = textSecondary)
+                            Text(text = "在微信、支付宝付款成功或查看停车账单后，自动提取金额并极速记入账本。", fontSize = 12.sp, color = textSecondary)
                         }
                         Switch(
                             checked = autoRecordEnabled,
-                            onCheckedChange = { autoRecordEnabled = it }
+                            onCheckedChange = {
+                                autoRecordEnabled = it
+                                AutoRecordAccessibilityService.setEnabled(context, it)
+                            }
+                        )
+                    }
+                }
+            }
+
+            // 🔔 3. 常驻通知栏保活 (彻底根治后台假死)
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(cardBg)
+                        .padding(18.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = MintGreen, modifier = Modifier.size(22.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(text = "常驻通知栏保活 (强烈推荐)", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(text = "在通知栏保持微弱守护，彻底防止微信付款或锁屏后被手机系统清理杀后台引发漏记。", fontSize = 12.sp, color = textSecondary)
+                        }
+                        Switch(
+                            checked = keepAliveEnabled,
+                            onCheckedChange = {
+                                keepAliveEnabled = it
+                                AutoRecordAccessibilityService.setKeepAliveEnabled(context, it)
+                                if (isEngineRunning) {
+                                    Toast.makeText(context, if (it) "已开启常驻通知守护" else "已关闭常驻通知", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // 📋 4. 最近一次自动取数动态
+            item {
+                val lastLog = AutoRecordAccessibilityService.lastRecordLog
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(cardBg)
+                        .padding(16.dp)
+                ) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.History, contentDescription = null, tint = BlueAccent, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = "最近一次自动取数动态", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (lastLog.isNotBlank()) lastLog else "暂无触发记录，可在下方点击模拟按钮或在微信/支付宝付款验证。",
+                            fontSize = 12.sp,
+                            color = if (lastLog.isNotBlank()) MintGreen else textSecondary,
+                            fontWeight = if (lastLog.isNotBlank()) FontWeight.Medium else FontWeight.Normal,
+                            lineHeight = 17.sp
                         )
                     }
                 }
@@ -120,23 +262,15 @@ fun AutoRecordScreen(
                 PermissionStepCard(
                     stepNumber = "1",
                     title = "无障碍服务 (必须)",
-                    subtitle = "用于感知微信与支付宝的支付成功页面，提取账单金额",
+                    subtitle = "用于感知微信与支付宝的支付成功页面与停车账单，提取金额",
                     isGranted = isAccessibilityOn,
-                    grantedText = "已开启 ✔",
+                    grantedText = if (isEngineRunning) "已开启(活跃) ✔" else "已开启(待激活)",
                     notGrantedText = "去开启 >",
                     textColor = textColor,
                     textSecondary = textSecondary,
                     cardBg = cardBg,
                     onClick = {
-                        try {
-                            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                            }
-                            context.startActivity(intent)
-                            Toast.makeText(context, "请在「已下载的应用」中找到「数簿」并开启", Toast.LENGTH_LONG).show()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "无法打开系统无障碍设置，请手动在手机设置中开启", Toast.LENGTH_SHORT).show()
-                        }
+                        openAccessibilitySettings(context)
                     }
                 )
             }
@@ -216,6 +350,27 @@ fun AutoRecordScreen(
                             lineHeight = 17.sp
                         )
                         Spacer(modifier = Modifier.height(14.dp))
+
+                        // 测试按钮 0 (最新修复：微信交停车费场景)
+                        Button(
+                            onClick = {
+                                AutoRecordAccessibilityService.simulateAutoRecord(
+                                    context,
+                                    4.00,
+                                    "深圳市神州路通技术有限公司",
+                                    "微信零钱通"
+                                ) { cat ->
+                                    Toast.makeText(context, "⚡ 模拟成功！已自动记账: 微信零钱通 ¥4.00 (商户: 深圳市神州路通 · 分类: $cat)", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = MintGreen),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("🚗 模拟微信支付停车费 ¥4.00 (神州路通) -> 行 · 微信零钱通", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         // 测试按钮 1
                         OutlinedButton(
@@ -329,13 +484,13 @@ fun AutoRecordScreen(
                         .padding(18.dp)
                 ) {
                     Column {
-                        Text(text = "👀 已完美适配的支付 App", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
+                        Text(text = "👀 已完美适配的支付场景", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = textColor)
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            AppBadge("微信支付", "绿色通道")
+                            AppBadge("微信/小程序", "停车费/点餐")
                             AppBadge("支付宝", "余额/花呗")
                             AppBadge("云闪付", "银联银行卡")
                             AppBadge("美团外卖", "美团支付")
@@ -357,11 +512,11 @@ fun AutoRecordScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(text = "💡", fontSize = 16.sp)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(text = "国产手机「受限制的设置」解除说明", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
+                            Text(text = "国产手机「受限制的设置」与防挂起说明", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "在小米澎湃OS / 华为鸿蒙 / vivo / OPPO 系统上，若开启无障碍提示受限制，请点击下方按钮直达应用详情，点击右上角【三个点】选择【允许受限制的设置】即可正常开启。",
+                            text = "在小米澎湃OS / 华为鸿蒙 / vivo / OPPO 系统上：\n1. 若开启无障碍提示受限制，请点击下方直达数簿设置，点击右上角【三个点】选择【允许受限制的设置】；\n2. 若遇服务假死，请打开上方「常驻通知栏保活」，或在设置中重启一次无障碍开关。",
                             fontSize = 12.sp,
                             color = textSecondary,
                             lineHeight = 17.sp
@@ -380,7 +535,7 @@ fun AutoRecordScreen(
                                 }
                             }
                         ) {
-                            Text("直达数簿应用设置 >", color = BlueAccent, fontSize = 13.sp)
+                            Text("直达数簿应用详情设置 >", color = BlueAccent, fontSize = 13.sp)
                         }
                     }
                 }
@@ -388,6 +543,18 @@ fun AutoRecordScreen(
 
             item { Spacer(modifier = Modifier.height(20.dp)) }
         }
+    }
+}
+
+private fun openAccessibilitySettings(context: Context) {
+    try {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intent)
+        Toast.makeText(context, "请在已下载应用中找到「数簿」，关闭后重新开启即可激活！", Toast.LENGTH_LONG).show()
+    } catch (e: Exception) {
+        Toast.makeText(context, "无法打开系统无障碍设置，请手动前往设置开启", Toast.LENGTH_SHORT).show()
     }
 }
 

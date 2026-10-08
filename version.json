@@ -1,8 +1,8 @@
 {
-  "versionCode": 7,
-  "versionName": "1.0.6",
-  "releaseDate": "2026-10-07",
-  "changelog": "1. 核心记账引擎升级：全面攻克饭店微信信用卡支付、扫码枪反扫与特约商户点餐小程序无感记账\n2. 引入工业级深度回溯算法：自动穿透商户名与银行卡/信用卡来源，分类更智能\n3. 增强双通道熔断防重：通知栏与无障碍界面双重查重去重，杜绝漏记与重复\n4. 模拟测试面板新增饭店信用卡与点餐小程序一键测试",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.6/shubu-v1.0.6.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.6/shubu-v1.0.6.apk"
+  "versionCode": 8,
+  "versionName": "1.0.7",
+  "releaseDate": "2026-10-08",
+  "changelog": "1. 微信停车费与支付凭证全覆盖：攻克神州路通/捷停车等停车缴费场景，精准提取负数金额（如 -4.00）、商户全称与车牌说明\n2. 根除国产手机后台假死：新增常驻通知栏低扰动守护与核心引擎实时心跳检测，杜绝无障碍服务被系统悄然休眠\n3. 多窗口穿透增强：启用 interactive windows 标志，穿透微信弹窗、H5、小程序与全部账单详情\n4. 细化零钱通入账：自动识别微信零钱通与微信零钱账户归集\n5. 模拟测试面板新增微信停车缴费一键验证",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.7/shubu-v1.0.7.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.0.7/shubu-v1.0.7.apk"
 }
