@@ -1,8 +1,8 @@
 {
-  "versionCode": 11,
-  "versionName": "1.1.0",
+  "versionCode": 12,
+  "versionName": "1.1.1",
   "releaseDate": "2026-10-08",
-  "changelog": "1. 彻底根除微信/支付宝重复记账：引入唯一交易单号终身排重机制（已记录单号终身拦截不重记）\n2. 防重保护窗口大幅升级：内存与数据库防重从60秒延长至10分钟，全局并发防重扩大至2分钟\n3. 历史账单智能防误触：自动识别微信/支付宝内置账单时间，凡超过5分钟的历史旧账查阅坚决拦截不触发\n4. 支持在「我要查账」中快捷点击垃圾桶一键删除误记的记录",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.0/shubu-v1.1.0.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.0/shubu-v1.1.0.apk"
+  "changelog": "1. 彻底根除查阅微信付款记录/账单误记账：建立查账、账单明细、服务号聊天历史绝对拦截黑名单（进入微信看付款记录坚决不记账）\n2. 剔除页面级模糊凭证触发词，仅在真实支付成功瞬间或系统通知栏触发\n3. 升级多格式账单时间识别（支持今天/昨天/月日等），彻底过滤往期旧账单\n4. 唯一交易单号终身排重，10分钟防重保护窗口\n5. 「我要查账」页面支持快捷点击垃圾桶一键删除误记的记录",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.1/shubu-v1.1.1.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.1/shubu-v1.1.1.apk"
 }

@@ -374,7 +374,13 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             }
         }
 
-        // 核心防误触 2：绝对拦截所有待支付 / 结算中 / 选餐购物车 / 选规格 / 收银台未付款页面
+        // 核心防误触 2：绝对拦截任何【查账、账单列表、历史明细、对账、统计、微信聊天/公众号翻看记录】页面
+        // 这是彻底杜绝“进微信看付款记录/查账却重复记账”的最高优先级防线！
+        if (isBrowsingHistoryOrChatting(pkg, texts, joined)) {
+            return
+        }
+
+        // 核心防误触 3：绝对拦截所有待支付 / 结算中 / 选餐购物车 / 选规格 / 收银台未付款页面
         val prePaymentKeywords = listOf(
             "提交订单", "去支付", "立即支付", "立即付款", "确认付款", "确认支付", "待付款", "待支付",
             "未支付", "去结算", "立即购买", "去买单", "选择支付方式", "找人付", "去拼单",
@@ -386,7 +392,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return
         }
 
-        // 核心防误触 3：美团、外卖、京东、饿了么等电商 App 极度严格过滤
+        // 核心防误触 4：美团、外卖、京东、饿了么等电商 App 极度严格过滤
         val isShoppingApp = pkg in listOf(
             "com.sankuai.meituan",
             "com.sankuai.meituan.takeoutnew",
@@ -416,22 +422,17 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 (joined.contains("微信转账") && joined.contains("已收款")) ||
                 (joined.contains("转账时间") && joined.contains("收款时间"))
 
-        // 2. 支付/扣款成功语义判定 (支出 - 必须有明确的已完成/已扣款成功标志，彻底剔除模糊词)
+        // 2. 支付/扣款成功语义判定 (支出 - 必须有明确的即时已完成/已扣款成功标志，严禁任何账单或卡片凭证模糊词)
         val isExpense = joined.contains("支付成功") ||
                 joined.contains("付款成功") ||
                 joined.contains("交易成功") ||
                 joined.contains("支付已完成") ||
-                joined.contains("付款凭证") ||
-                joined.contains("微信支付凭证") ||
                 joined.contains("扫码付款成功") ||
                 joined.contains("成功付款") ||
                 joined.contains("向商家付款成功") ||
-                (joined.contains("支付明细") && (joined.contains("完成") || joined.contains("成功"))) ||
-                (joined.contains("账单详情") && (joined.contains("支付成功") || joined.contains("扣款成功"))) ||
-                (joined.contains("全部账单") && (joined.contains("支付成功") || joined.contains("扣款成功"))) ||
                 // 停车场景与缴费场景
-                (joined.contains("支付停车费") && (joined.contains("支付成功") || joined.contains("凭证") || joined.contains("道闸已抬起"))) ||
-                (joined.contains("停车缴费") && (joined.contains("成功") || joined.contains("完成") || joined.contains("凭证"))) ||
+                (joined.contains("支付停车费") && (joined.contains("支付成功") || joined.contains("道闸已抬起"))) ||
+                (joined.contains("停车缴费") && (joined.contains("成功") || joined.contains("完成"))) ||
                 joined.contains("缴费成功") ||
                 joined.contains("扣费成功") ||
                 joined.contains("已缴费") ||
@@ -440,9 +441,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 (joined.contains("取餐号") && !joined.contains("去支付")) ||
                 (joined.contains("订单已完成") && !joined.contains("待付款")) ||
                 (joined.contains("订单已支付") && !joined.contains("去结算")) ||
-                // 聚合商户 / 商家小程序 (必须有已扣款或支付成功字样)
-                (joined.contains("特约商户") && (joined.contains("已扣款") || joined.contains("支付成功") || joined.contains("交易成功"))) ||
-                (joined.contains("微信支付") && (joined.contains("已扣款") || joined.contains("已支付") || joined.contains("消费成功") || joined.contains("凭证"))) ||
+                // 聚合商户 / 商家小程序 (必须有明确支付成功标志)
+                (joined.contains("特约商户") && (joined.contains("支付成功") || joined.contains("交易成功"))) ||
                 // 银联云闪付 / 银行 App
                 joined.contains("扣款成功") ||
                 joined.contains("刷卡成功") ||
@@ -608,6 +608,50 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * 核心防误触：绝对拦截任何【查账、账单列表、历史明细、对账、统计、微信聊天/公众号翻看记录】页面
+     * 这是彻底杜绝“进微信看付款记录/查账却重复记账”的最高优先级防线！
+     */
+    private fun isBrowsingHistoryOrChatting(pkg: String, texts: List<String>, joined: String): Boolean {
+        // 1. 微信 / 支付宝 账单列表、交易记录与流水明细页面特征
+        val billHistoryKeywords = listOf(
+            "全部账单", "账单列表", "账单明细", "全部交易类型", "月账单", "年账单", "按月查看",
+            "收支明细", "资金流水", "账单服务", "对此订单有疑问", "常见问题", "投诉商家",
+            "联系商户", "开发票", "申请开票", "查看往期", "退款明细", "退款记录", "退款进度",
+            "零钱明细", "对账中心", "账单分类", "月度汇总", "账单详情", "交易记录", "我的账单"
+        )
+        if (billHistoryKeywords.any { joined.contains(it) }) {
+            return true
+        }
+
+        // 筛选与统计特征：包含“筛选”且包含“统计”或“全部”
+        if (joined.contains("筛选") && (joined.contains("统计") || joined.contains("全部") || joined.contains("类型") || joined.contains("金额"))) {
+            return true
+        }
+
+        // 2. 微信聊天窗口 / 公众号会话界面特征（无论个人聊天、群聊、还是微信支付服务号）
+        // 无论里面显示什么旧凭证或卡片，只要处于聊天窗口环境，坚决拦截
+        if (pkg == "com.tencent.mm") {
+            val chatKeywords = listOf(
+                "切换到输入法", "按住说话", "按住 说话", "发送", "发消息", "自定义菜单",
+                "聊天信息", "公众号", "微信号", "聊天记录", "清空聊天记录", "移出移进"
+            )
+            if (chatKeywords.any { joined.contains(it) }) {
+                return true
+            }
+        }
+
+        // 3. 屏幕中出现多笔独立金额（账单列表或聊天记录流的典型特征）
+        // 真实支付结果页屏幕上通常只有 1 个主金额（最多 1 个优惠减免金额）
+        // 如果页面上出现了 3 个或以上的货币符号金额，说明必定是列表流水页面或聊天历史
+        val countCurrencies = Regex("""[¥￥]\s*-?\s*[0-9]+""").findAll(joined).count()
+        if (countCurrencies >= 3) {
+            return true
+        }
+
+        return false
+    }
+
     private fun extractOrderIdFromTexts(texts: List<String>): String? {
         val labels = listOf("交易单号", "商户单号", "订单号", "交易号", "支付单号")
         for (i in texts.indices) {
@@ -632,19 +676,65 @@ class AutoRecordAccessibilityService : AccessibilityService() {
     }
 
     private fun extractBillTimestamp(texts: List<String>): Long? {
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.CHINA)
+        val calendar = java.util.Calendar.getInstance()
+        val currentYear = calendar.get(java.util.Calendar.YEAR)
+
+        // 1. 标准完整日期格式: 2026-10-08 18:24:00 或 2026-10-08 18:24 或 2026/10/08 18:24
+        val sdfFull = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.CHINA)
         val sdfShort = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA)
-        val regex = Regex("""202[0-9]-[0-1][0-9]-[0-3][0-9]\s+[0-2][0-9]:[0-5][0-9](?::[0-5][0-9])?""")
+        val regexFull = Regex("""202[0-9][-/.][0-1][0-9][-/.][0-3][0-9]\s+[0-2][0-9]:[0-5][0-9](?::[0-5][0-9])?""")
+
         for (t in texts) {
-            val m = regex.find(t)
+            val m = regexFull.find(t)
             if (m != null) {
-                val str = m.value.trim()
+                val str = m.value.replace('/', '-').replace('.', '-').trim()
                 try {
-                    val date = if (str.length > 16) sdf.parse(str) else sdfShort.parse(str)
+                    val date = if (str.length > 16) sdfFull.parse(str) else sdfShort.parse(str)
                     if (date != null) return date.time
                 } catch (_: Exception) {}
             }
         }
+
+        // 2. 中文月日格式: 10月8日 18:24 或 2026年10月8日 18:24
+        val regexMonthDay = Regex("""(?:(202[0-9])年)?([0-1]?[0-9])月([0-3]?[0-9])日\s*([0-2][0-9]:[0-5][0-9])""")
+        for (t in texts) {
+            val m = regexMonthDay.find(t)
+            if (m != null) {
+                val year = m.groupValues[1].toIntOrNull() ?: currentYear
+                val month = m.groupValues[2].toIntOrNull() ?: 1
+                val day = m.groupValues[3].toIntOrNull() ?: 1
+                val timeStr = m.groupValues[4]
+                try {
+                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA)
+                    val date = sdf.parse(String.format(java.util.Locale.CHINA, "%04d-%02d-%02d %s", year, month, day, timeStr))
+                    if (date != null) return date.time
+                } catch (_: Exception) {}
+            }
+        }
+
+        // 3. 相对时间: 今天 18:24 或 昨天 18:24
+        val regexRelative = Regex("""(今天|昨天)\s*([0-2][0-9]:[0-5][0-9])""")
+        for (t in texts) {
+            val m = regexRelative.find(t)
+            if (m != null) {
+                val dayType = m.groupValues[1]
+                val timeParts = m.groupValues[2].split(":")
+                if (timeParts.size == 2) {
+                    val hour = timeParts[0].toIntOrNull() ?: 0
+                    val minute = timeParts[1].toIntOrNull() ?: 0
+                    val cal = java.util.Calendar.getInstance()
+                    if (dayType == "昨天") {
+                        cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
+                    }
+                    cal.set(java.util.Calendar.HOUR_OF_DAY, hour)
+                    cal.set(java.util.Calendar.MINUTE, minute)
+                    cal.set(java.util.Calendar.SECOND, 0)
+                    cal.set(java.util.Calendar.MILLISECOND, 0)
+                    return cal.timeInMillis
+                }
+            }
+        }
+
         return null
     }
 
@@ -656,7 +746,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             "零钱余额", "转账时间", "收款时间", "你已收款", "资金已存入零钱", "你已收款，资金已存入零钱",
             "微信支付凭证", "付款凭证", "支付方式", "扣款成功", "交易明细", "查看账单", "查看详情",
             "返回商家", "关闭", "确定", "返回", "商家小程序", "我的订单", "取餐号", "订单已完成",
-            "全部账单", "常见问题", "账单服务"
+            "全部账单", "常见问题", "账单服务", "退款", "退款成功", "退款申请", "退款中", "退款明细", "退款结果"
         )
     }
 

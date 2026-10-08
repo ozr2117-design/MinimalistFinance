@@ -32,7 +32,8 @@ jobs:
     - name: Build Android APKs (Release & Debug)
       run: |
         gradle assembleRelease assembleDebug --stacktrace
-        cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/shubu-v1.1.0.apk || true
+        cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/shubu-v1.1.1.apk || true
+        cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/shubu-latest.apk || true
 
     - name: Upload Release APK (Signed for App Stores)
       uses: actions/upload-artifact@v4
