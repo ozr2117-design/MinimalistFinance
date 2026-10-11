@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.minimalist.finance.MainActivity
@@ -358,11 +359,27 @@ class AutoRecordAccessibilityService : AccessibilityService() {
     private fun handleWindow(pkg: String, event: AccessibilityEvent?) {
         // 多维度聚合节点：event.source + rootInActiveWindow + windows 交互窗口列表
         val nodesToInspect = mutableListOf<AccessibilityNodeInfo>()
-        event?.source?.let { nodesToInspect.add(it) }
-        rootInActiveWindow?.let { if (!nodesToInspect.contains(it)) nodesToInspect.add(it) }
+        event?.source?.let {
+            if (it.packageName?.toString() == pkg) {
+                nodesToInspect.add(it)
+            }
+        }
+        rootInActiveWindow?.let {
+            if (it.packageName?.toString() == pkg && !nodesToInspect.contains(it)) {
+                nodesToInspect.add(it)
+            }
+        }
         try {
             windows?.forEach { win ->
-                win.root?.let { if (!nodesToInspect.contains(it)) nodesToInspect.add(it) }
+                val root = win.root ?: return@forEach
+                val winPkg = root.packageName?.toString()
+                // 彻底排除系统状态栏与导航栏窗口，严防将状态栏网速 (如 6.68KB/s)、电量、时间混入页面节点！
+                if (winPkg == "com.android.systemui" || win.type == AccessibilityWindowInfo.TYPE_SYSTEM) {
+                    return@forEach
+                }
+                if (winPkg == pkg && !nodesToInspect.contains(root)) {
+                    nodesToInspect.add(root)
+                }
             }
         } catch (_: Exception) {}
 
@@ -865,6 +882,22 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
     private fun isSystemWord(word: String): Boolean {
         val cleaned = word.trim()
+        if (cleaned.isEmpty()) return true
+
+        // 1. 状态栏网速过滤（如 "6.68KB/s", "0.13 KB/s", "1.95MB/s", "120 B/s", "10 K/s" 等）
+        if (cleaned.matches(Regex("""^[0-9]+(\.[0-9]+)?\s*(B/s|KB/s|MB/s|GB/s|Kb/s|Mb/s|k/s|m/s|b/s)$""", RegexOption.IGNORE_CASE)) ||
+            cleaned.contains("/s", ignoreCase = true)) {
+            return true
+        }
+
+        // 2. 状态栏系统状态（网络信号、电池电量、系统时间）
+        if (cleaned in listOf("4G", "5G", "HD", "VoLTE", "WiFi", "WIFI") ||
+            cleaned.matches(Regex("""^[0-9]{1,2}:[0-9]{2}(:[0-9]{2})?$""")) ||
+            cleaned.matches(Regex("""^[0-9]{1,3}%$"""))) {
+            return true
+        }
+
+        // 3. 常见业务系统关键字
         return cleaned in listOf(
             "微信支付", "支付宝", "支付成功", "付款成功", "交易成功", "完成", "收款成功", "账单详情", "人民币",
             "零钱余额", "转账时间", "收款时间", "你已收款", "资金已存入零钱", "你已收款，资金已存入零钱",
@@ -905,6 +938,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
     }
 
     private fun collectTexts(node: AccessibilityNodeInfo, list: MutableList<String>) {
+        if (node.packageName?.toString() == "com.android.systemui") return
         node.text?.let {
             val str = it.toString().trim()
             if (str.isNotEmpty()) list.add(str)
@@ -1074,7 +1108,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                         val prev = texts[prevIdx].trim()
                         if (prev.length in 2..32 && !isSystemWord(prev) &&
                             !prev.startsWith("¥") && !prev.startsWith("￥") &&
-                            !prev.contains("支付") && !prev.contains("付款") && !prev.contains("详情")) {
+                            !prev.contains("支付") && !prev.contains("付款") && !prev.contains("详情") &&
+                            !prev.contains("/s", ignoreCase = true)) {
                             return prev
                         }
                     }

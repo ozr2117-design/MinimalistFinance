@@ -486,6 +486,10 @@ private fun RecordItemCard(
     if (orderIdMatch != null) {
         cleanTitle = cleanTitle.replace(orderIdMatch.value, "").trim()
     }
+    // 容错：若历史记录误捕获了手机状态栏实时网速 (如 6.68KB/s, 1.95MB/s)，智能回退为分类名称或日常消费
+    if (cleanTitle.matches(Regex("""^[0-9]+(\.[0-9]+)?\s*(B/s|KB/s|MB/s|GB/s|Kb/s|Mb/s|k/s|m/s|b/s)$""", RegexOption.IGNORE_CASE))) {
+        cleanTitle = if (record.categoryName.isNotBlank()) record.categoryName else (if (isExpense) "日常消费" else "日常收入")
+    }
     if (cleanTitle.isBlank()) {
         cleanTitle = if (record.categoryName.isNotBlank()) record.categoryName else (if (isExpense) "支出" else "收入")
     }
