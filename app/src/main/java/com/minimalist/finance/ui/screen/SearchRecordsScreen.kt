@@ -18,6 +18,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -455,7 +460,7 @@ private fun StatementSummaryHeader(
     }
 }
 
-// 单笔账单卡片 (包含分类、账户、备注、标签、准确时间与删除)
+// 单笔账单卡片 (包含分类、账户、商户备注、标签、准确时间、详情弹窗与删除)
 @Composable
 private fun RecordItemCard(
     record: Record,
@@ -465,16 +470,86 @@ private fun RecordItemCard(
     isDark: Boolean,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
+    var showDetailDialog by remember { mutableStateOf(false) }
+
     val isExpense = record.type == TransactionType.EXPENSE
     val amountColor = if (isExpense) CoralRed else MintGreen
     val amountPrefix = if (isExpense) "-" else "+"
     val dateStr = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(record.timestamp))
+
+    // 智能提取干净标题与单号：兼容旧格式（"自动记账: 肯德基 [单号:xxx]"）与新格式（"肯德基 [单号:xxx]"）
+    val rawRemark = record.remark
+    var cleanTitle = rawRemark.removePrefix("自动记账: ").trim()
+    val orderIdMatch = Regex("\\[单号:([^\\]]+)\\]").find(cleanTitle)
+    val orderId = orderIdMatch?.groupValues?.get(1)
+    if (orderIdMatch != null) {
+        cleanTitle = cleanTitle.replace(orderIdMatch.value, "").trim()
+    }
+    if (cleanTitle.isBlank()) {
+        cleanTitle = if (record.categoryName.isNotBlank()) record.categoryName else (if (isExpense) "支出" else "收入")
+    }
+
+    // 点击卡片弹出的全貌详情对话框
+    if (showDetailDialog) {
+        AlertDialog(
+            onDismissRequest = { showDetailDialog = false },
+            title = {
+                Text(text = "流水详情", fontWeight = FontWeight.Bold, color = textColor)
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "$amountPrefix¥${String.format(Locale.CHINA, "%.2f", record.amount)}",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = amountColor,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    HorizontalDivider(color = if (isDark) DarkBorder else LightBorder)
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    DetailRow(label = "商户/说明", value = cleanTitle, textColor = textColor, textSecondary = textSecondary)
+                    DetailRow(label = "分类", value = if (record.categoryName.isNotBlank()) record.categoryName else "未分类", textColor = textColor, textSecondary = textSecondary)
+                    DetailRow(label = "账户", value = if (record.accountName.isNotBlank()) record.accountName else "默认账户", textColor = textColor, textSecondary = textSecondary)
+                    DetailRow(label = "标签", value = if (record.tag.isNotBlank()) record.tag else "无", textColor = textColor, textSecondary = textSecondary)
+                    val fullDateStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA).format(Date(record.timestamp))
+                    DetailRow(label = "交易时间", value = fullDateStr, textColor = textColor, textSecondary = textSecondary)
+
+                    if (!orderId.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        DetailRow(label = "交易单号", value = orderId, textColor = textColor, textSecondary = textSecondary)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                clipboard?.setPrimaryClip(ClipData.newPlainText("交易单号", orderId))
+                                Toast.makeText(context, "单号已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("复制交易单号", fontSize = 12.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDetailDialog = false }) {
+                    Text("完成", color = BlueAccent)
+                }
+            }
+        )
+    }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(cardBg)
+            .clickable { showDetailDialog = true }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -501,23 +576,42 @@ private fun RecordItemCard(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                // 第一行：专注呈现商户/说明全名，最多2行，彻底杜绝短距离被截断
+                Text(
+                    text = cleanTitle,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor,
+                    maxLines = 2,
+                    lineHeight = 20.sp,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // 第二行：时间 · 分类 · 账户胶囊 · 标签胶囊
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = if (record.remark.isNotBlank()) record.remark else (if (record.categoryName.isNotBlank()) record.categoryName else (if (isExpense) "支出" else "收入")),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = textColor,
+                        text = buildString {
+                            append(dateStr)
+                            if (record.categoryName.isNotBlank() && cleanTitle != record.categoryName) {
+                                append(" · ")
+                                append(record.categoryName)
+                            }
+                        },
+                        fontSize = 12.sp,
+                        color = textSecondary,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
+                        softWrap = false
                     )
+
                     if (record.accountName.isNotBlank()) {
                         Spacer(modifier = Modifier.width(6.dp))
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(4.dp),
                             color = if (isDark) DarkSurface else Color(0xFFF1F5F9)
                         ) {
                             Text(
@@ -528,27 +622,7 @@ private fun RecordItemCard(
                             )
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(3.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = buildString {
-                            append(dateStr)
-                            if (record.categoryName.isNotBlank() && record.remark.isNotBlank()) {
-                                append(" · ")
-                                append(record.categoryName)
-                            }
-                        },
-                        fontSize = 12.sp,
-                        color = textSecondary,
-                        maxLines = 1,
-                        softWrap = false
-                    )
                     if (record.tag.isNotBlank()) {
                         Spacer(modifier = Modifier.width(6.dp))
                         Surface(
@@ -571,15 +645,17 @@ private fun RecordItemCard(
             }
         }
 
+        Spacer(modifier = Modifier.width(8.dp))
+
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "$amountPrefix¥${String.format(Locale.CHINA, "%.2f", record.amount)}",
-                fontSize = 17.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = amountColor
             )
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
 
             IconButton(
                 onClick = onDelete,
@@ -593,5 +669,36 @@ private fun RecordItemCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun DetailRow(
+    label: String,
+    value: String,
+    textColor: Color,
+    textSecondary: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = textSecondary,
+            modifier = Modifier.width(72.dp)
+        )
+        Text(
+            text = value,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = textColor,
+            modifier = Modifier.weight(1f),
+            softWrap = true
+        )
     }
 }

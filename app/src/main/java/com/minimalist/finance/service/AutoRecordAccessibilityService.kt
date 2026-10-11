@@ -145,7 +145,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                     amount = amount,
                     categoryName = categoryName,
                     accountName = accountName,
-                    remark = "自动记账: $merchantName",
+                    remark = merchantName,
                     tag = "自动记账",
                     timestamp = System.currentTimeMillis()
                 )
@@ -581,9 +581,9 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             }
 
             val remarkText = if (!orderId.isNullOrBlank()) {
-                "自动记账: $displayName [单号:$orderId]"
+                "$displayName [单号:$orderId]"
             } else {
-                "自动记账: $displayName"
+                displayName
             }
 
             val finalTimestamp = billTimestamp ?: now
