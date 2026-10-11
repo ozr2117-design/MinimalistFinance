@@ -45,6 +45,9 @@ fun AboutScreen(
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
+    var isMilestoneEnabled by remember {
+        mutableStateOf(com.minimalist.finance.util.MilestoneEncouragementManager.isMilestoneEnabled(context))
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -175,6 +178,43 @@ fun AboutScreen(
                             color = textSecondary,
                             lineHeight = 20.sp
                         )
+                    }
+                }
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(cardBg)
+                        .padding(18.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text(text = "⚙️ 功能偏好", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = "记账里程碑正向鼓励", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = textColor)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "每累计记录 5 笔、10 笔等节点时，浮现轻量底气提示语，陪伴好习惯养成",
+                                    fontSize = 12.sp,
+                                    color = textSecondary,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Switch(
+                                checked = isMilestoneEnabled,
+                                onCheckedChange = {
+                                    isMilestoneEnabled = it
+                                    com.minimalist.finance.util.MilestoneEncouragementManager.setMilestoneEnabled(context, it)
+                                }
+                            )
+                        }
                     }
                 }
             }

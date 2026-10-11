@@ -104,6 +104,9 @@ interface RecordDao {
 
     @Query("SELECT COUNT(*) FROM records WHERE remark LIKE '%' || :orderId || '%'")
     suspend fun getRecordCountByOrderId(orderId: String): Int
+
+    @Query("SELECT COUNT(*) FROM records")
+    suspend fun getTotalRecordCount(): Int
 }
 
 

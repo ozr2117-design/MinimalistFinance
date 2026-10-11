@@ -209,6 +209,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 timestamp = selectedTimestamp.value
             )
             recordDao.insertRecord(record)
+            com.minimalist.finance.util.MilestoneEncouragementManager.checkAndCelebrate(getApplication(), viewModelScope)
             onClear()
             remarkText.value = ""
             selectedImageUri.value = null

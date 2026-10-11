@@ -602,6 +602,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 timestamp = finalTimestamp
             )
             db.recordDao().insertRecord(record)
+            com.minimalist.finance.util.MilestoneEncouragementManager.checkAndCelebrate(applicationContext, scope)
 
             lastRecordLog = "${if (type == TransactionType.INCOME) "收入 +" else "支出 -"}¥${String.format(java.util.Locale.CHINA, "%.2f", amount)} ($catName · $accountName · $displayName)"
             lastRecordTime = now
