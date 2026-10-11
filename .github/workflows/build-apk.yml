@@ -32,7 +32,7 @@ jobs:
     - name: Build Android APKs (Release & Debug)
       run: |
         gradle assembleRelease assembleDebug --stacktrace
-        cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/shubu-v1.1.3.apk || true
+        cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/shubu-v1.1.4.apk || true
         cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/shubu-latest.apk || true
 
     - name: Upload Release APK (Signed for App Stores)

@@ -105,6 +105,9 @@ interface RecordDao {
     @Query("SELECT COUNT(*) FROM records WHERE remark LIKE '%' || :orderId || '%'")
     suspend fun getRecordCountByOrderId(orderId: String): Int
 
+    @Query("SELECT COUNT(*) FROM records WHERE amount = :amount AND type = :type AND remark LIKE '%' || :merchant || '%' AND timestamp >= :sinceTimestamp")
+    suspend fun getSameMerchantRecordCount(amount: Double, type: TransactionType, merchant: String, sinceTimestamp: Long): Int
+
     @Query("SELECT COUNT(*) FROM records")
     suspend fun getTotalRecordCount(): Int
 }

@@ -1,8 +1,8 @@
 {
-  "versionCode": 14,
-  "versionName": "1.1.3",
+  "versionCode": 15,
+  "versionName": "1.1.4",
   "releaseDate": "2026-10-11",
-  "changelog": "1. 界面极简化精简：彻底移除无障碍设置页内冗余的模拟支付测试卡片，界面清爽干净\n2. 谦逊务实更新：将支付场景描述调整为「正在逐步适配的支付场景」\n3. 新增「记账里程碑正向鼓励」：每累计记录 5 笔、10 笔等关键节点时，浮现轻量底气提示语，陪伴好习惯养成\n4. 设置中支持自由开启/关闭记账里程碑正向鼓励（默认开启）",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.3/shubu-v1.1.3.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.3/shubu-v1.1.3.apk"
+  "changelog": "1. 彻底解决翻看微信记录重复记账：引入交易单号持久化与特征指纹引擎，杜绝查账翻阅流水二次入账\n2. 严密拦截美团等电商未支付状态：严格过滤待付款、购物车、去结算等中间态\n3. 全方位排除信用卡还款：精准识别还款与账单通知，杜绝信用卡还款误记为日常消费\n4. 数据库级同日同商户同金额智能防重守护",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.4/shubu-v1.1.4.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.4/shubu-v1.1.4.apk"
 }

@@ -20,6 +20,7 @@ import com.minimalist.finance.R
 import com.minimalist.finance.data.AppDatabase
 import com.minimalist.finance.data.model.Record
 import com.minimalist.finance.data.model.TransactionType
+import com.minimalist.finance.util.AutoRecordDedupeManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -44,14 +45,6 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         var isServiceRunning = false
         var lastRecordLog: String = ""
         var lastRecordTime: Long = 0L
-
-        // 内存级 10 分钟强力防重缓存：key -> 触发时间戳
-        private val dedupeCache = ConcurrentHashMap<String, Long>()
-        // 订单交易单号强力防重缓存：orderId -> 触发时间戳
-        private val orderDedupeCache = ConcurrentHashMap<String, Long>()
-        private var lastGlobalTime = 0L
-        private var lastGlobalAmount = 0.0
-
 
         private const val CHANNEL_ID = "auto_record_service_channel"
         private const val NOTIFICATION_ID = 8888
@@ -299,22 +292,13 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         val combined = "$title $text $bigText $subText $ticker".trim()
         if (combined.isEmpty()) return
 
-        // 核心排除：坚决拦截信用卡还款、账单提醒、还款入账等非消费场景（杜绝误记还款与账单通知）
-        val isRepaymentOrBill = combined.contains("还款") ||
-                combined.contains("账单提醒") ||
-                combined.contains("账单通知") ||
-                combined.contains("本期账单") ||
-                combined.contains("应还金额") ||
-                combined.contains("应还款") ||
-                combined.contains("最低还款") ||
-                combined.contains("还款成功") ||
-                combined.contains("还款入账") ||
-                combined.contains("已还款") ||
-                combined.contains("自动还款") ||
-                combined.contains("对账单") ||
-                combined.contains("溢缴款") ||
-                combined.contains("分期还款")
-        if (isRepaymentOrBill) {
+        // 核心排除 1：坚决拦截信用卡还款、账单提醒、还款入账等非消费场景（杜绝误记还款与账单通知）
+        if (isCreditCardRepayment(pkg, "", listOf(combined), combined)) {
+            return
+        }
+
+        // 核心排除 2：通知中存在未支付 / 待支付等预备状态词
+        if (isPrePaymentOrCart(combined)) {
             return
         }
 
@@ -361,8 +345,13 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         if (amount <= 0.0) return
 
         val partyName = extractMerchantFromNotification(combined)
+        if (isCreditCardRepayment(pkg, partyName, listOf(combined), combined)) {
+            return
+        }
+
         val detectedAccount = extractAccountFromTexts(pkg, listOf(combined))
-        saveAutoRecord(pkg, amount, partyName, combined, notifType, detectedAccount)
+        val orderId = extractOrderIdFromSingleText(combined)
+        saveAutoRecord(pkg, amount, partyName, combined, notifType, detectedAccount, orderId = orderId)
     }
 
     // ====== 通道 2：页面节点解析逻辑 ======
@@ -401,14 +390,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         }
 
         // 核心防误触 3：绝对拦截所有待支付 / 结算中 / 选餐购物车 / 选规格 / 收银台未付款页面
-        val prePaymentKeywords = listOf(
-            "提交订单", "去支付", "立即支付", "立即付款", "确认付款", "确认支付", "待付款", "待支付",
-            "未支付", "去结算", "立即购买", "去买单", "选择支付方式", "找人付", "去拼单",
-            "确认订单", "还需支付", "放弃支付", "继续支付", "确认下单", "去凑单", "加入购物车",
-            "选好了", "选择优惠券", "请输入支付密码", "验证支付密码", "指纹验证", "还差",
-            "起送", "另需配送费", "外卖专享", "差￥", "差¥", "加一份", "去结算("
-        )
-        if (prePaymentKeywords.any { joined.contains(it) }) {
+        if (isPrePaymentOrCart(joined)) {
             return
         }
 
@@ -421,7 +403,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         )
         if (isShoppingApp) {
             // 在外卖/电商 App 内，只有当明确展示全屏“支付成功”或“付款成功”，且绝无待付款字样时才允许触发
-            val hasStrictShoppingSuccess = joined.contains("支付成功") || joined.contains("付款成功")
+            val hasStrictShoppingSuccess = (joined.contains("支付成功") || joined.contains("付款成功")) &&
+                    !isPrePaymentOrCart(joined)
             if (!hasStrictShoppingSuccess) {
                 return
             }
@@ -497,11 +480,17 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         } else {
             extractMerchantFromList(texts)
         }
+
+        // 核心排除：坚决拦截信用卡还款、账单提醒、还款入账等非消费场景（杜绝误记还款）
+        if (isCreditCardRepayment(pkg, partyName, texts, joined)) {
+            return
+        }
+
         saveAutoRecord(pkg, amount, partyName, joined, targetType, detectedAccount, orderId, billTimestamp)
     }
 
     /**
-     * 统一安全入库逻辑（核心多层熔断与订单单号终身排重机制）
+     * 统一安全入库逻辑（核心持久化防重与全维度熔断机制）
      */
     private fun saveAutoRecord(
         pkg: String,
@@ -515,28 +504,29 @@ class AutoRecordAccessibilityService : AccessibilityService() {
     ) {
         val now = System.currentTimeMillis()
 
-        // 1. 唯一订单号内存拦截：只要该微信/支付宝单号在内存中记录过，绝对直接拦截
-        if (!orderId.isNullOrBlank()) {
-            val lastSeenOrder = orderDedupeCache[orderId] ?: 0L
-            if (lastSeenOrder > 0L) {
-                return
-            }
-        }
-
-        // 2. 内存级 10 分钟 (600秒) 强力防重检查：同一应用同一类型同一金额 10 分钟内严格只记一次
-        val cacheKey = "$pkg-${type.name}-${String.format(java.util.Locale.US, "%.2f", amount)}"
-        val lastSeen = dedupeCache[cacheKey] ?: 0L
-        if (now - lastSeen < 600_000L) {
+        // 0. 信用卡还款终极排他底线拦截
+        if (isCreditCardRepayment(pkg, partyName, listOf(rawContext), rawContext)) {
             return
         }
 
-        // 3. 全局时间防重：2分钟 (120秒) 内全系统同金额同类型坚决不重复触发
-        if (now - lastGlobalTime < 120_000L && Math.abs(lastGlobalAmount - amount) < 0.001) {
+        // 1. 唯一订单号持久化拦截：只要微信/支付宝单号曾记过账，绝对直接拦截（终身防重）
+        if (!orderId.isNullOrBlank() && AutoRecordDedupeManager.isOrderRecorded(applicationContext, orderId)) {
             return
         }
 
-        // 4. 历史旧账单查阅拦截：若单据自带的时间早于当前系统时间 5 分钟以上，说明用户只是在查账/翻阅往期凭证！
-        if (billTimestamp != null && now - billTimestamp > 300_000L) {
+        // 2. 交易特征指纹持久化拦截 (金额 + 商户 + 时间指纹)
+        val fingerprint = AutoRecordDedupeManager.buildFingerprint(pkg, type, amount, partyName, billTimestamp)
+        if (AutoRecordDedupeManager.isFingerprintRecorded(applicationContext, fingerprint)) {
+            return
+        }
+
+        // 3. 短时间内存防抖 (60秒内同应用同金额同类型坚决不重复触发)
+        if (AutoRecordDedupeManager.isDebounced(pkg, type, amount, 60_000L)) {
+            return
+        }
+
+        // 4. 历史旧账单查阅拦截：若单据自带的时间早于当前系统时间 3 分钟以上，说明用户只是在查账/翻阅往期凭证！
+        if (billTimestamp != null && now - billTimestamp > 180_000L) {
             return
         }
 
@@ -555,17 +545,6 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
         val catName = classifyCategory("$displayName $rawContext", type)
 
-        // 刷新内存去重戳
-        dedupeCache[cacheKey] = now
-        if (!orderId.isNullOrBlank()) {
-            orderDedupeCache[orderId] = now
-        }
-        lastGlobalTime = now
-        lastGlobalAmount = amount
-
-        // 清理过期缓存
-        cleanExpiredCache(now)
-
         scope.launch {
             val db = AppDatabase.getDatabase(applicationContext, scope)
 
@@ -573,13 +552,31 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             if (!orderId.isNullOrBlank()) {
                 val existingCount = db.recordDao().getRecordCountByOrderId(orderId)
                 if (existingCount > 0) {
+                    AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
                     return@launch
                 }
             }
 
-            // 6. 数据库底层熔断防重：检查数据库内近 10 分钟 (600秒) 是否存在相同金额相同类型的记账
+            // 6. 数据库当天同商户同金额排重拦截：
+            // 如果商户名称明确（如“肯德基”），且今天已经记过一笔完全一样的商户+金额，绝对不再记！
+            if (partyName.isNotBlank() && !isSystemWord(partyName)) {
+                val todayStart = AutoRecordDedupeManager.getTodayStartMillis()
+                val existingMerchantCount = db.recordDao().getSameMerchantRecordCount(
+                    amount = amount,
+                    type = type,
+                    merchant = partyName,
+                    sinceTimestamp = todayStart
+                )
+                if (existingMerchantCount > 0) {
+                    AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
+                    return@launch
+                }
+            }
+
+            // 7. 数据库底层熔断防重：检查数据库内近 10 分钟 (600秒) 是否存在相同金额相同类型的记账
             val recentDupCount = db.recordDao().getRecentDuplicateCount(amount, type, now - 600_000L)
             if (recentDupCount > 0) {
+                AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
                 return@launch
             }
 
@@ -602,6 +599,10 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 timestamp = finalTimestamp
             )
             db.recordDao().insertRecord(record)
+
+            // 写入持久化防重存储
+            AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
+
             com.minimalist.finance.util.MilestoneEncouragementManager.checkAndCelebrate(applicationContext, scope)
 
             lastRecordLog = "${if (type == TransactionType.INCOME) "收入 +" else "支出 -"}¥${String.format(java.util.Locale.CHINA, "%.2f", amount)} ($catName · $accountName · $displayName)"
@@ -618,23 +619,6 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun cleanExpiredCache(now: Long) {
-        val iterator = dedupeCache.entries.iterator()
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            if (now - entry.value > 1200_000L) { // 20分钟清理
-                iterator.remove()
-            }
-        }
-        val orderIterator = orderDedupeCache.entries.iterator()
-        while (orderIterator.hasNext()) {
-            val entry = orderIterator.next()
-            if (now - entry.value > 86400_000L) { // 24小时清理
-                orderIterator.remove()
-            }
-        }
-    }
-
     /**
      * 核心防误触：绝对拦截任何【查账、账单列表、历史明细、对账、统计、微信聊天/公众号翻看记录】页面
      * 这是彻底杜绝“进微信看付款记录/查账却重复记账”的最高优先级防线！
@@ -643,30 +627,39 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         // 1. 微信 / 支付宝 账单列表、交易记录与流水明细页面特征
         val billHistoryKeywords = listOf(
             "全部账单", "账单列表", "账单明细", "全部交易类型", "月账单", "年账单", "按月查看",
-            "收支明细", "资金流水", "账单服务", "对此订单有疑问", "常见问题", "投诉商家",
+            "收支明细", "资金流水", "账单服务", "对此订单有疑问", "对此交易有疑问", "常见问题", "投诉商家",
             "联系商户", "开发票", "申请开票", "查看往期", "退款明细", "退款记录", "退款进度",
-            "零钱明细", "对账中心", "账单分类", "月度汇总", "账单详情", "交易记录", "我的账单"
+            "零钱明细", "对账中心", "账单分类", "月度汇总", "账单详情", "交易记录", "我的账单",
+            "查看账单详情", "账单服务", "交易明细"
         )
         if (billHistoryKeywords.any { joined.contains(it) }) {
             return true
         }
 
-        // 筛选与统计特征：包含“筛选”且包含“统计”或“全部”
+        // 2. 核心铁证：如果页面上同时出现“单号/订单号”以及“支付时间/交易时间”
+        // 刚在收银台付完款的即时完成界面，绝对不会把“交易单号”和“支付时间”同时罗列出来，只有点进历史账单查阅明细时才会展开这些参数！
+        val hasOrderIdLabel = joined.contains("交易单号") || joined.contains("商户单号") ||
+                joined.contains("订单号") || joined.contains("支付单号")
+        val hasTimeLabel = joined.contains("支付时间") || joined.contains("交易时间") ||
+                joined.contains("创建时间") || joined.contains("成交时间")
+        if (hasOrderIdLabel && hasTimeLabel) {
+            return true
+        }
+        if (hasOrderIdLabel && (joined.contains("对此订单有疑问") || joined.contains("常见问题") || joined.contains("投诉商家") || joined.contains("开发票"))) {
+            return true
+        }
+
+        // 3. 筛选与统计特征：包含“筛选”且包含“统计”或“全部”
         if (joined.contains("筛选") && (joined.contains("统计") || joined.contains("全部") || joined.contains("类型") || joined.contains("金额"))) {
             return true
         }
 
-        // 2. 信用卡还款、账单提醒、还款通知特征（坚决不作为日常消费记账）
-        val repaymentKeywords = listOf(
-            "还款", "还款成功", "信用卡还款", "还款提醒", "还款金额", "还款入账", "已还款",
-            "自动还款", "本期账单", "账单提醒", "账单通知", "应还金额", "应还款", "最低还款",
-            "对账单", "溢缴款", "分期还款"
-        )
-        if (repaymentKeywords.any { joined.contains(it) }) {
+        // 4. 信用卡还款、账单提醒、还款通知特征（坚决不作为日常消费记账）
+        if (isCreditCardRepayment(pkg, "", texts, joined)) {
             return true
         }
 
-        // 3. 微信聊天窗口 / 公众号 / 服务号聚合流 / 银行动账模板消息卡片特征
+        // 5. 微信聊天窗口 / 公众号 / 服务号聚合流 / 银行动账模板消息卡片特征
         // 无论里面显示什么旧凭证或卡片，只要处于微信聊天、公众号、服务号消息流环境，坚决拦截
         if (pkg == "com.tencent.mm") {
             val chatAndFeedKeywords = listOf(
@@ -680,15 +673,68 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             }
         }
 
-        // 4. 屏幕中出现多笔独立金额（账单列表或聊天记录流的典型特征）
-        // 真实支付结果页屏幕上通常只有 1 个主金额（最多 1 个优惠减免金额）
-        // 如果页面上出现了 3 个或以上的货币符号金额，说明必定是列表流水页面或聊天历史
+        // 6. 屏幕中出现多笔独立金额（账单列表或聊天记录流的典型特征）
         val countCurrencies = Regex("""[¥￥]\s*-?\s*[0-9]+""").findAll(joined).count()
         if (countCurrencies >= 3) {
             return true
         }
 
         return false
+    }
+
+    /**
+     * 信用卡还款全方位精准排他拦截
+     */
+    private fun isCreditCardRepayment(pkg: String, partyName: String, texts: List<String>, joined: String): Boolean {
+        // 1. 商户名称明确为还款相关
+        val repaymentMerchantKeywords = listOf(
+            "还款", "信用卡", "信用卡中心", "卡还款", "还卡", "溢缴款"
+        )
+        if (repaymentMerchantKeywords.any { partyName.contains(it) }) {
+            return true
+        }
+
+        // 2. 页面/通知文本包含强还款特征
+        val repaymentKeywords = listOf(
+            "还款", "还款成功", "信用卡还款", "还款提醒", "还款金额", "还款入账", "已还款",
+            "自动还款", "本期账单", "账单提醒", "账单通知", "应还金额", "应还款", "最低还款",
+            "对账单", "溢缴款", "分期还款", "还信用卡", "还款代扣", "信用卡还款到账",
+            "账单已出", "本期应还", "最后还款日", "已成功还款"
+        )
+        if (repaymentKeywords.any { joined.contains(it) }) {
+            return true
+        }
+
+        // 3. 信用卡 + (账单/还款/成功/入账) 组合特征
+        if (joined.contains("信用卡") && (
+            joined.contains("还款") || joined.contains("账单") || joined.contains("入账") ||
+            joined.contains("应还") || joined.contains("成功还款") || joined.contains("溢缴") ||
+            joined.contains("代扣")
+        )) {
+            return true
+        }
+
+        return false
+    }
+
+    /**
+     * 未付款 / 待支付 / 结算中 / 选餐购物车 / 选规格拦截
+     */
+    private fun isPrePaymentOrCart(joined: String): Boolean {
+        val prePaymentKeywords = listOf(
+            "提交订单", "去支付", "立即支付", "立即付款", "确认付款", "确认支付", "待付款", "待支付",
+            "未支付", "去结算", "立即购买", "去买单", "选择支付方式", "找人付", "去拼单",
+            "确认订单", "还需支付", "放弃支付", "继续支付", "确认下单", "去凑单", "加入购物车",
+            "选好了", "选择优惠券", "请输入支付密码", "验证支付密码", "指纹验证", "还差",
+            "起送", "另需配送费", "外卖专享", "差￥", "差¥", "加一份", "去结算(",
+            "未完成支付", "待结账", "未付款", "订单待付款", "需付款", "需支付", "合计待支付"
+        )
+        return prePaymentKeywords.any { joined.contains(it) }
+    }
+
+    private fun extractOrderIdFromSingleText(text: String): String? {
+        val regex = Regex("""(?:交易单号|商户单号|订单号|交易号|单号)[:：\s]+([A-Za-z0-9_]{8,40})""")
+        return regex.find(text)?.groupValues?.get(1)
     }
 
     private fun extractOrderIdFromTexts(texts: List<String>): String? {

@@ -11,5 +11,8 @@
 /build
 /captures
 .externalNativeBuild
-.cxx
 local.properties
+*.mp3
+.agents/
+skills-lock.json
+promo_materials/
