@@ -180,6 +180,8 @@ fun AboutScreen(
                         )
                     }
                 }
+            }
+
             item {
                 Box(
                     modifier = Modifier
