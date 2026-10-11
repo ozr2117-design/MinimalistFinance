@@ -1,8 +1,8 @@
 {
-  "versionCode": 16,
-  "versionName": "1.1.5",
+  "versionCode": 17,
+  "versionName": "1.1.6",
   "releaseDate": "2026-10-11",
-  "changelog": "1. 视觉排版大重构：去除冗余前缀，商户名称最大展示2行，长商户名完整舒展不截断\n2. 结构空间大释放：账户标识下移至第二行，主标题横向空间翻倍\n3. 新增流水详情弹窗：点击任意账单卡片查看完整详情，支持一键复制交易单号\n4. 入库备注轻量化优化与历史账目完美平滑兼容",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.5/shubu-v1.1.5.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.5/shubu-v1.1.5.apk"
+  "changelog": "1. 视觉极简大净化：彻底移除流水卡片上拥挤变形的 #自动记账 标签，界面舒展自然\n2. 信息层级轻量化：第二行专注呈现时间、分类与账户，彻底消除字符拥挤截断",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.6/shubu-v1.1.6.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.6/shubu-v1.1.6.apk"
 }

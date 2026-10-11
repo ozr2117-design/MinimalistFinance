@@ -623,7 +623,8 @@ private fun RecordItemCard(
                         }
                     }
 
-                    if (record.tag.isNotBlank()) {
+                    // 仅显示用户自定义的业务标签，隐藏冗余的 "自动记账" 系统标签，释放呼吸感与空间
+                    if (record.tag.isNotBlank() && record.tag != "自动记账") {
                         Spacer(modifier = Modifier.width(6.dp))
                         Surface(
                             shape = RoundedCornerShape(4.dp),
