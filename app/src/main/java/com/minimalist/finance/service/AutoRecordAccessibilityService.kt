@@ -299,6 +299,25 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         val combined = "$title $text $bigText $subText $ticker".trim()
         if (combined.isEmpty()) return
 
+        // 核心排除：坚决拦截信用卡还款、账单提醒、还款入账等非消费场景（杜绝误记还款与账单通知）
+        val isRepaymentOrBill = combined.contains("还款") ||
+                combined.contains("账单提醒") ||
+                combined.contains("账单通知") ||
+                combined.contains("本期账单") ||
+                combined.contains("应还金额") ||
+                combined.contains("应还款") ||
+                combined.contains("最低还款") ||
+                combined.contains("还款成功") ||
+                combined.contains("还款入账") ||
+                combined.contains("已还款") ||
+                combined.contains("自动还款") ||
+                combined.contains("对账单") ||
+                combined.contains("溢缴款") ||
+                combined.contains("分期还款")
+        if (isRepaymentOrBill) {
+            return
+        }
+
         // 识别微信、支付宝、云闪付的通知（支出或收入）
         var notifType: TransactionType? = null
         if (pkg == "com.tencent.mm") {
@@ -310,7 +329,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 combined.contains("你有一笔微信支付支出") || combined.contains("成功付款") ||
                 combined.contains("支付成功") || combined.contains("已扣款") ||
                 combined.contains("特约商户") || combined.contains("完成支付") ||
-                combined.contains("信用卡") || combined.contains("消费支出") ||
+                (combined.contains("信用卡") && (combined.contains("消费") || combined.contains("扣款") || combined.contains("支出") || combined.contains("支付"))) ||
+                combined.contains("消费支出") ||
                 combined.contains("支付停车费") || combined.contains("停车缴费")) {
                 notifType = TransactionType.EXPENSE
             }
@@ -422,31 +442,37 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 (joined.contains("微信转账") && joined.contains("已收款")) ||
                 (joined.contains("转账时间") && joined.contains("收款时间"))
 
-        // 2. 支付/扣款成功语义判定 (支出 - 必须有明确的即时已完成/已扣款成功标志，严禁任何账单或卡片凭证模糊词)
-        val isExpense = joined.contains("支付成功") ||
-                joined.contains("付款成功") ||
-                joined.contains("交易成功") ||
-                joined.contains("支付已完成") ||
-                joined.contains("扫码付款成功") ||
-                joined.contains("成功付款") ||
-                joined.contains("向商家付款成功") ||
-                // 停车场景与缴费场景
-                (joined.contains("支付停车费") && (joined.contains("支付成功") || joined.contains("道闸已抬起"))) ||
-                (joined.contains("停车缴费") && (joined.contains("成功") || joined.contains("完成"))) ||
-                joined.contains("缴费成功") ||
-                joined.contains("扣费成功") ||
-                joined.contains("已缴费") ||
-                // 饭店扫码点餐小程序
-                (joined.contains("下单成功") && !joined.contains("待支付")) ||
-                (joined.contains("取餐号") && !joined.contains("去支付")) ||
-                (joined.contains("订单已完成") && !joined.contains("待付款")) ||
-                (joined.contains("订单已支付") && !joined.contains("去结算")) ||
-                // 聚合商户 / 商家小程序 (必须有明确支付成功标志)
-                (joined.contains("特约商户") && (joined.contains("支付成功") || joined.contains("交易成功"))) ||
-                // 银联云闪付 / 银行 App
-                joined.contains("扣款成功") ||
-                joined.contains("刷卡成功") ||
-                joined.contains("银联付款成功")
+        // 2. 支付/扣款成功语义判定 (支出 - 必须有明确的即时已完成/已扣款成功标志，微信内严格限定收银台完成页)
+        val isExpense = if (pkg == "com.tencent.mm") {
+            (joined.contains("支付成功") || joined.contains("付款成功") || joined.contains("向商家付款成功") ||
+             joined.contains("扫码付款成功") || (joined.contains("支付停车费") && joined.contains("道闸已抬起")) ||
+             (joined.contains("停车缴费") && joined.contains("成功")) ||
+             (joined.contains("下单成功") && !joined.contains("待支付")) ||
+             (joined.contains("取餐号") && !joined.contains("去支付"))) &&
+             // 在微信内，必须包含收银台支付结果操作按钮或停车/取餐标志（绝对杜绝服务号消息卡片）
+             (joined.contains("完成") || joined.contains("返回商家") || joined.contains("停车") || joined.contains("取餐号"))
+        } else {
+            joined.contains("支付成功") ||
+            joined.contains("付款成功") ||
+            joined.contains("交易成功") ||
+            joined.contains("支付已完成") ||
+            joined.contains("扫码付款成功") ||
+            joined.contains("成功付款") ||
+            joined.contains("向商家付款成功") ||
+            (joined.contains("支付停车费") && (joined.contains("支付成功") || joined.contains("道闸已抬起"))) ||
+            (joined.contains("停车缴费") && (joined.contains("成功") || joined.contains("完成"))) ||
+            joined.contains("缴费成功") ||
+            joined.contains("扣费成功") ||
+            joined.contains("已缴费") ||
+            (joined.contains("下单成功") && !joined.contains("待支付")) ||
+            (joined.contains("取餐号") && !joined.contains("去支付")) ||
+            (joined.contains("订单已完成") && !joined.contains("待付款")) ||
+            (joined.contains("订单已支付") && !joined.contains("去结算")) ||
+            (joined.contains("特约商户") && (joined.contains("支付成功") || joined.contains("交易成功"))) ||
+            joined.contains("扣款成功") ||
+            joined.contains("刷卡成功") ||
+            joined.contains("银联付款成功")
+        }
 
 
         val targetType = when {
@@ -629,19 +655,31 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return true
         }
 
-        // 2. 微信聊天窗口 / 公众号会话界面特征（无论个人聊天、群聊、还是微信支付服务号）
-        // 无论里面显示什么旧凭证或卡片，只要处于聊天窗口环境，坚决拦截
+        // 2. 信用卡还款、账单提醒、还款通知特征（坚决不作为日常消费记账）
+        val repaymentKeywords = listOf(
+            "还款", "还款成功", "信用卡还款", "还款提醒", "还款金额", "还款入账", "已还款",
+            "自动还款", "本期账单", "账单提醒", "账单通知", "应还金额", "应还款", "最低还款",
+            "对账单", "溢缴款", "分期还款"
+        )
+        if (repaymentKeywords.any { joined.contains(it) }) {
+            return true
+        }
+
+        // 3. 微信聊天窗口 / 公众号 / 服务号聚合流 / 银行动账模板消息卡片特征
+        // 无论里面显示什么旧凭证或卡片，只要处于微信聊天、公众号、服务号消息流环境，坚决拦截
         if (pkg == "com.tencent.mm") {
-            val chatKeywords = listOf(
+            val chatAndFeedKeywords = listOf(
                 "切换到输入法", "按住说话", "按住 说话", "发送", "发消息", "自定义菜单",
-                "聊天信息", "公众号", "微信号", "聊天记录", "清空聊天记录", "移出移进"
+                "聊天信息", "公众号", "微信号", "聊天记录", "清空聊天记录", "移出移进",
+                "服务号", "订阅号", "交易提醒", "消费提醒", "动账提醒", "动账通知",
+                "交易类型", "日常消费", "信用卡消费", "尾号", "卡号", "轻触阅读", "查看全文"
             )
-            if (chatKeywords.any { joined.contains(it) }) {
+            if (chatAndFeedKeywords.any { joined.contains(it) }) {
                 return true
             }
         }
 
-        // 3. 屏幕中出现多笔独立金额（账单列表或聊天记录流的典型特征）
+        // 4. 屏幕中出现多笔独立金额（账单列表或聊天记录流的典型特征）
         // 真实支付结果页屏幕上通常只有 1 个主金额（最多 1 个优惠减免金额）
         // 如果页面上出现了 3 个或以上的货币符号金额，说明必定是列表流水页面或聊天历史
         val countCurrencies = Regex("""[¥￥]\s*-?\s*[0-9]+""").findAll(joined).count()
@@ -735,6 +773,45 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             }
         }
 
+        // 4. 月-日 时:分 格式 (如 "10-11 12:51", "10/11 12:51")
+        val regexMonthDayShort = Regex("""([0-1]?[0-9])[-/.]([0-3]?[0-9])\s+([0-2][0-9]:[0-5][0-9](?::[0-5][0-9])?)""")
+        for (t in texts) {
+            val m = regexMonthDayShort.find(t)
+            if (m != null) {
+                val month = m.groupValues[1].toIntOrNull() ?: 1
+                val day = m.groupValues[2].toIntOrNull() ?: 1
+                val timeStr = m.groupValues[3]
+                try {
+                    val sdf = if (timeStr.length > 5) java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.CHINA)
+                              else java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA)
+                    val date = sdf.parse(String.format(java.util.Locale.CHINA, "%04d-%02d-%02d %s", currentYear, month, day, timeStr))
+                    if (date != null) return date.time
+                } catch (_: Exception) {}
+            }
+        }
+
+        // 5. 纯时间格式 (如 "12:51", "12:51:30") 提取单据时间与当前做旧单拦截
+        val regexTimeOnly = Regex("""(?:交易时间|支付时间|时间)?\s*([0-2][0-9]:[0-5][0-9](?::[0-5][0-9])?)""")
+        for (t in texts) {
+            if (t.contains("时间") || t.contains("12:") || t.contains("13:") || t.contains("14:")) {
+                val m = regexTimeOnly.find(t)
+                if (m != null) {
+                    val timeParts = m.groupValues[1].split(":")
+                    if (timeParts.size >= 2) {
+                        val hour = timeParts[0].toIntOrNull() ?: 0
+                        val minute = timeParts[1].toIntOrNull() ?: 0
+                        val second = if (timeParts.size > 2) timeParts[2].toIntOrNull() ?: 0 else 0
+                        val cal = java.util.Calendar.getInstance()
+                        cal.set(java.util.Calendar.HOUR_OF_DAY, hour)
+                        cal.set(java.util.Calendar.MINUTE, minute)
+                        cal.set(java.util.Calendar.SECOND, second)
+                        cal.set(java.util.Calendar.MILLISECOND, 0)
+                        return cal.timeInMillis
+                    }
+                }
+            }
+        }
+
         return null
     }
 
@@ -746,7 +823,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             "零钱余额", "转账时间", "收款时间", "你已收款", "资金已存入零钱", "你已收款，资金已存入零钱",
             "微信支付凭证", "付款凭证", "支付方式", "扣款成功", "交易明细", "查看账单", "查看详情",
             "返回商家", "关闭", "确定", "返回", "商家小程序", "我的订单", "取餐号", "订单已完成",
-            "全部账单", "常见问题", "账单服务", "退款", "退款成功", "退款申请", "退款中", "退款明细", "退款结果"
+            "全部账单", "常见问题", "账单服务", "退款", "退款成功", "退款申请", "退款中", "退款明细", "退款结果",
+            "日常", "日常消费", "消费", "交易", "交易类型", "交易摘要", "信用卡消费", "尾号", "银行卡", "信用卡还款", "还款"
         )
     }
 
