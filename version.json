@@ -1,8 +1,8 @@
 {
-  "versionCode": 19,
-  "versionName": "1.1.8",
+  "versionCode": 20,
+  "versionName": "1.1.9",
   "releaseDate": "2026-10-12",
-  "changelog": "1. 云闪付信用卡还款与跨行互转智能过滤：精准识别纯卡号转出与入账通知，坚决排除无效还款信息\n2. 引入【双向同金额极速对冲熔断引擎】：90秒内成对发生的还款进出一律相互抵消撤回，不记录任何中间态废账，账本只留纯真实消费",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.8/shubu-v1.1.8.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.8/shubu-v1.1.8.apk"
+  "changelog": "1. 场景1【数据洞察与反馈】：上线「刚需生存 vs 品质享受」双色消费结构透视卡片与心理正反馈建议；新增当月支出 TOP 排行榜与月度财务温度小结\n2. 场景3【轻量预算防暴走】：支持设定本月总预算，动态推算「每日可用建议支出额度」防冲动消费；主记账页顶栏随手直达预算调整",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.9/shubu-v1.1.9.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.9/shubu-v1.1.9.apk"
 }

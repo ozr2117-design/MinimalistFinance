@@ -36,6 +36,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.minimalist.finance.data.model.Category
 import com.minimalist.finance.data.model.TransactionType
+import com.minimalist.finance.ui.component.BudgetSettingDialog
 import com.minimalist.finance.ui.component.CustomKeypad
 import com.minimalist.finance.ui.theme.*
 import com.minimalist.finance.ui.viewmodel.MainViewModel
@@ -60,6 +61,11 @@ fun RecordScreen(
 
     val categories by viewModel.currentCategories.collectAsState()
     val selectedCatId by viewModel.selectedCategoryId.collectAsState()
+
+    // 预算状态
+    val monthlyBudget by viewModel.monthlyBudget.collectAsState()
+    val budgetInfo by viewModel.monthlyBudgetInfo.collectAsState()
+    var showBudgetDialog by remember { mutableStateOf(false) }
 
     // 胶囊状态
     val accountName by viewModel.selectedAccountName.collectAsState()
@@ -175,20 +181,52 @@ fun RecordScreen(
                     }
                 }
 
-                // 当前所属账本小标签 (点击直达账本切换)
-                currentBook?.let { book ->
+                // 当前所属账本小标签 & 预算防暴走微胶囊
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    currentBook?.let { book ->
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(cardBg)
+                                .clickable { onNavigateToBooks() }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = "账本: ${book.name}", fontSize = 12.sp, color = textSecondary)
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(imageVector = Icons.Default.KeyboardArrowDown, contentDescription = null, tint = textSecondary, modifier = Modifier.size(15.dp))
+                        }
+                    }
+
+                    // 预算微胶囊 (点击直接调起修改弹窗)
                     Row(
                         modifier = Modifier
-                            .padding(horizontal = 20.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(cardBg)
-                            .clickable { onNavigateToBooks() }
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                            .background(if (monthlyBudget > 0.0) Color(budgetInfo.statusColor).copy(alpha = 0.12f) else cardBg)
+                            .clickable { showBudgetDialog = true }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "当前账本: ${book.name} (${book.currency})", fontSize = 12.sp, color = textSecondary)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(imageVector = Icons.Default.KeyboardArrowDown, contentDescription = null, tint = textSecondary, modifier = Modifier.size(16.dp))
+                        Text(
+                            text = if (monthlyBudget > 0.0) {
+                                if (budgetInfo.remainingBudget >= 0) {
+                                    "🎯 余¥${String.format(Locale.CHINA, "%.0f", budgetInfo.remainingBudget)} · 日均¥${String.format(Locale.CHINA, "%.0f", budgetInfo.dailyAvailable)}"
+                                } else {
+                                    "🎯 超支¥${String.format(Locale.CHINA, "%.0f", -budgetInfo.remainingBudget)}"
+                                }
+                            } else {
+                                "🎯 设定预算"
+                            },
+                            fontSize = 11.sp,
+                            fontWeight = if (monthlyBudget > 0.0) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (monthlyBudget > 0.0) Color(budgetInfo.statusColor) else textSecondary
+                        )
                     }
                 }
             }
@@ -703,6 +741,17 @@ fun RecordScreen(
                 onClose = { showAccountSheet = false }
             )
         }
+    }
+
+    if (showBudgetDialog) {
+        BudgetSettingDialog(
+            currentBudget = monthlyBudget,
+            onDismiss = { showBudgetDialog = false },
+            onSave = { newBudget ->
+                viewModel.setMonthlyBudget(newBudget)
+                showBudgetDialog = false
+            }
+        )
     }
 }
 

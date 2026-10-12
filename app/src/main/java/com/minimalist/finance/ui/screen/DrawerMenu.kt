@@ -104,7 +104,7 @@ fun DrawerMenu(
 
             DrawerMenuItem(
                 icon = Icons.Default.BarChart,
-                title = "资产大盘",
+                title = "财务大盘与洞察",
                 textColor = textColor,
                 onClick = {
                     onCloseDrawer()

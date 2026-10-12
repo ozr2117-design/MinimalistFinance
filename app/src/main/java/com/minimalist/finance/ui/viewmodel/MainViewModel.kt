@@ -88,12 +88,183 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val periodicRules = periodicRuleDao.getAllRules().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     val installmentPlans = installmentPlanDao.getAllPlans().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    // 本月轻量预算 (0.0 表示未设定)
+    val monthlyBudget = MutableStateFlow<Double>(0.0)
+
+    fun setMonthlyBudget(amount: Double) {
+        val valid = maxOf(0.0, amount)
+        monthlyBudget.value = valid
+        val prefs = getApplication<Application>().getSharedPreferences("shubu_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putFloat("monthly_budget", valid.toFloat()).apply()
+    }
+
+    private fun getMonthTimeRange(): Pair<Long, Long> {
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.DAY_OF_MONTH, 1)
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val start = cal.timeInMillis
+
+        val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        cal.set(Calendar.DAY_OF_MONTH, daysInMonth)
+        cal.set(Calendar.HOUR_OF_DAY, 23)
+        cal.set(Calendar.MINUTE, 59)
+        cal.set(Calendar.SECOND, 59)
+        cal.set(Calendar.MILLISECOND, 999)
+        val end = cal.timeInMillis
+        return Pair(start, end)
+    }
+
+    // 1. 预算防暴走计算流
+    val monthlyBudgetInfo: StateFlow<MonthlyBudgetInfo> = combine(allRecords, monthlyBudget) { records, budget ->
+        val (start, end) = getMonthTimeRange()
+        val nowCal = Calendar.getInstance()
+        val dayOfMonth = nowCal.get(Calendar.DAY_OF_MONTH)
+        val daysInMonth = nowCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val daysRemaining = maxOf(1, daysInMonth - dayOfMonth + 1)
+
+        val monthRecords = records.filter { it.timestamp in start..end }
+        val monthExpense = monthRecords.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+        val monthIncome = monthRecords.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+
+        val remaining = if (budget > 0.0) budget - monthExpense else 0.0
+        val dailyAvailable = if (budget > 0.0) maxOf(0.0, remaining) / daysRemaining else 0.0
+        val usagePercent = if (budget > 0.0) ((monthExpense / budget) * 100).toFloat() else 0f
+        val isOver = budget > 0.0 && monthExpense > budget
+
+        MonthlyBudgetInfo(
+            budgetAmount = budget,
+            spentAmount = monthExpense,
+            remainingBudget = remaining,
+            daysInMonth = daysInMonth,
+            dayOfMonth = dayOfMonth,
+            daysRemaining = daysRemaining,
+            dailyAvailable = dailyAvailable,
+            usagePercent = usagePercent,
+            isOverBudget = isOver
+        )
+    }.stateIn(viewModelScope, SharingStarted.Lazily, MonthlyBudgetInfo())
+
+    // 2. 刚需生存 vs 享受生活 比例计算流
+    val lifestyleVsNecessity: StateFlow<LifestyleVsNecessity> = allRecords.map { records ->
+        val (start, end) = getMonthTimeRange()
+        val monthRecords = records.filter { it.timestamp in start..end && it.type == TransactionType.EXPENSE }
+        val total = monthRecords.sumOf { it.amount }
+
+        var necessity = 0.0
+        var lifestyle = 0.0
+        var other = 0.0
+
+        for (r in monthRecords) {
+            val txt = "${r.categoryName} ${r.remark}".lowercase()
+            if (isNecessityKeyword(txt)) {
+                necessity += r.amount
+            } else if (isLifestyleKeyword(txt)) {
+                lifestyle += r.amount
+            } else {
+                other += r.amount
+            }
+        }
+
+        val necRatio = if (total > 0) ((necessity / total) * 100).toFloat() else 0f
+        val lifeRatio = if (total > 0) ((lifestyle / total) * 100).toFloat() else 0f
+
+        val feedback = when {
+            total <= 0.0 -> "本月尚无支出，保持空灵澄澈的收支状态！"
+            necRatio >= 65f -> "刚需生存支出占比高达 ${String.format(Locale.CHINA, "%.0f", necRatio)}%，主要集中在住房通勤等基本盘，消费作风非常克制务实！"
+            lifeRatio >= 55f -> "享受型品质生活消费占比达 ${String.format(Locale.CHINA, "%.0f", lifeRatio)}%，近期生活色彩丰富！可适当关注日均餐饮娱乐，留存充足的安全感备用金。"
+            else -> "刚需生存（${String.format(Locale.CHINA, "%.0f", necRatio)}%）与品质生活（${String.format(Locale.CHINA, "%.0f", lifeRatio)}%）比例适中，既顾好了基本盘又犒赏了自己，财务结构非常健康！"
+        }
+
+        LifestyleVsNecessity(
+            necessityExpense = necessity,
+            lifestyleExpense = lifestyle,
+            otherExpense = other,
+            totalExpense = total,
+            necessityRatio = necRatio,
+            lifestyleRatio = lifeRatio,
+            insightAdvice = feedback
+        )
+    }.stateIn(viewModelScope, SharingStarted.Lazily, LifestyleVsNecessity())
+
+    // 3. 消费分类排行榜
+    val categoryRanks: StateFlow<List<CategoryExpenseRank>> = allRecords.map { records ->
+        val (start, end) = getMonthTimeRange()
+        val monthExpenses = records.filter { it.timestamp in start..end && it.type == TransactionType.EXPENSE }
+        val total = monthExpenses.sumOf { it.amount }
+
+        monthExpenses
+            .groupBy { it.categoryName.ifBlank { "未分类" } }
+            .map { (cat, list) ->
+                val sum = list.sumOf { it.amount }
+                val pct = if (total > 0) ((sum / total) * 100).toFloat() else 0f
+                CategoryExpenseRank(cat, sum, pct, list.size)
+            }
+            .sortedByDescending { it.amount }
+            .take(6)
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // 4. 周期财务温度小结
+    val monthlySummary: StateFlow<MonthlyInsightSummary> = allRecords.map { records ->
+        val (start, end) = getMonthTimeRange()
+        val monthRecords = records.filter { it.timestamp in start..end }
+        val monthExpenses = monthRecords.filter { it.type == TransactionType.EXPENSE }
+        val totalExpense = monthExpenses.sumOf { it.amount }
+
+        val totalCount = monthRecords.size
+        val avg = if (monthExpenses.isNotEmpty()) totalExpense / monthExpenses.size else 0.0
+        val maxRecord = monthExpenses.maxByOrNull { it.amount }
+        val activeDays = monthRecords.map {
+            SimpleDateFormat("yyyyMMdd", Locale.CHINA).format(Date(it.timestamp))
+        }.distinct().size
+
+        val encouragement = when {
+            totalCount == 0 -> "流水见证真实的生活。每一笔记录，都是认真对待日子的足迹。"
+            totalCount < 5 -> "良好的记账习惯正在萌芽，每一笔记录都在给未来积攒底气。"
+            totalCount < 20 -> "节奏良好！坚持记账不仅是记数字，更是对生活的用心审视。"
+            else -> "太棒了！本月已记账 $totalCount 笔，持续掌控财务节奏，生活越过越有数！"
+        }
+
+        MonthlyInsightSummary(
+            totalTransactions = totalCount,
+            daysRecorded = activeDays,
+            avgExpensePerTx = avg,
+            maxSingleExpense = maxRecord?.amount ?: 0.0,
+            encouragement = encouragement
+        )
+    }.stateIn(viewModelScope, SharingStarted.Lazily, MonthlyInsightSummary())
+
+    private fun isNecessityKeyword(text: String): Boolean {
+        return text.contains("住") || text.contains("房租") || text.contains("水电") ||
+               text.contains("物业") || text.contains("燃气") || text.contains("宽带") ||
+               text.contains("行") || text.contains("交通") || text.contains("地铁") ||
+               text.contains("公交") || text.contains("加油") || text.contains("停车") ||
+               text.contains("车费") || text.contains("医") || text.contains("药") ||
+               text.contains("健康") || text.contains("学") || text.contains("教育") ||
+               text.contains("还贷") || text.contains("通信") || text.contains("话费") ||
+               text.contains("高速") || text.contains("维修")
+    }
+
+    private fun isLifestyleKeyword(text: String): Boolean {
+        return text.contains("食") || text.contains("餐饮") || text.contains("外卖") ||
+               text.contains("咖啡") || text.contains("奶茶") || text.contains("零食") ||
+               text.contains("麦当劳") || text.contains("肯德基") || text.contains("超市") ||
+               text.contains("玩") || text.contains("娱乐") || text.contains("游戏") ||
+               text.contains("旅游") || text.contains("电影") || text.contains("衣") ||
+               text.contains("服饰") || text.contains("购物") || text.contains("数码") ||
+               text.contains("美妆") || text.contains("护肤") || text.contains("宠物") ||
+               text.contains("健身") || text.contains("运动")
+    }
+
     init {
-        // 读取持久化常用备注
+        // 读取持久化常用备注与预算
         val prefs = application.getSharedPreferences("shubu_prefs", android.content.Context.MODE_PRIVATE)
         val saved = prefs.getString("recent_remarks", "") ?: ""
         val initialList = if (saved.isNotBlank()) saved.split("|||").filter { it.isNotBlank() } else emptyList()
         recentRemarks.value = initialList
+        monthlyBudget.value = prefs.getFloat("monthly_budget", 0f).toDouble()
 
         viewModelScope.launch {
             try {
