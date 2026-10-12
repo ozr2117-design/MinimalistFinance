@@ -110,6 +110,9 @@ interface RecordDao {
 
     @Query("SELECT COUNT(*) FROM records")
     suspend fun getTotalRecordCount(): Int
+
+    @Query("DELETE FROM records WHERE amount = :amount AND timestamp >= :sinceTimestamp")
+    suspend fun deleteRecentRecordsByAmount(amount: Double, sinceTimestamp: Long): Int
 }
 
 

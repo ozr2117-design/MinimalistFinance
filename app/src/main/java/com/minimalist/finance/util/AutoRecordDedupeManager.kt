@@ -29,6 +29,9 @@ object AutoRecordDedupeManager {
     // 短时防抖缓存 (key -> timestamp)
     private val debounceCache = ConcurrentHashMap<String, Long>()
 
+    // 内部互转与还款短时间对冲缓存: key = "$pkg-${amountStr}" -> Pair(type, timestamp)
+    private val hedgePairCache = ConcurrentHashMap<String, Pair<TransactionType, Long>>()
+
     @Volatile
     private var isInitialized = false
 
@@ -83,6 +86,35 @@ object AutoRecordDedupeManager {
             while (it.hasNext()) {
                 val entry = it.next()
                 if (now - entry.value > 600_000L) {
+                    it.remove()
+                }
+            }
+        }
+        return false
+    }
+
+    /**
+     * 云闪付/银行卡内部转账与还款双向对冲检测:
+     * 若在短时间 (90 秒内) 发生同包名同金额但相反收支类型 (一进一出) 的交易，判定为互转/还款对冲，返回 true
+     */
+    fun checkAndRegisterHedge(pkg: String, type: TransactionType, amount: Double, windowMs: Long = 90_000L): Boolean {
+        val now = System.currentTimeMillis()
+        val key = "$pkg-${String.format(Locale.US, "%.2f", amount)}"
+        val existing = hedgePairCache[key]
+        if (existing != null) {
+            val (existingType, timestamp) = existing
+            if (now - timestamp < windowMs && existingType != type) {
+                hedgePairCache.remove(key)
+                return true
+            }
+        }
+        hedgePairCache[key] = Pair(type, now)
+        // 清理超过 10 分钟的对冲缓存
+        if (hedgePairCache.size > 200) {
+            val it = hedgePairCache.entries.iterator()
+            while (it.hasNext()) {
+                val entry = it.next()
+                if (now - entry.value.second > 600_000L) {
                     it.remove()
                 }
             }

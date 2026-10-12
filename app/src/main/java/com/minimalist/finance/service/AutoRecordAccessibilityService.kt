@@ -295,6 +295,20 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
         // 核心排除 1：坚决拦截信用卡还款、账单提醒、还款入账等非消费场景（杜绝误记还款与账单通知）
         if (isCreditCardRepayment(pkg, "", listOf(combined), combined)) {
+            // 若为云闪付入账通知，提取金额并向对冲引擎注册 INCOME 事件，用于抵消成对的还款转出
+            if (pkg == "com.unionpay") {
+                val hedgedAmount = extractAmountFromSingleText(combined)
+                if (hedgedAmount != null && hedgedAmount > 0.0) {
+                    val wasHedged = AutoRecordDedupeManager.checkAndRegisterHedge(pkg, TransactionType.INCOME, hedgedAmount, 90_000L)
+                    if (wasHedged) {
+                        val now = System.currentTimeMillis()
+                        scope.launch {
+                            val db = AppDatabase.getDatabase(applicationContext, scope)
+                            db.recordDao().deleteRecentRecordsByAmount(hedgedAmount, now - 90_000L)
+                        }
+                    }
+                }
+            }
             return
         }
 
@@ -526,6 +540,19 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return
         }
 
+        // 0.1 内部转账与还款【同时间同金额对冲熔断】拦截
+        // 90秒内同一应用发生完全相同金额的一出一进（如还款时卡A扣2060.89，卡B入2060.89）
+        val isHedged = AutoRecordDedupeManager.checkAndRegisterHedge(pkg, type, amount, 90_000L)
+        if (isHedged) {
+            // 命中对冲对！说明上一笔和当前笔构成内部互转/还款对
+            // 立即异步清理可能刚写入数据库的上一笔同金额记录，并终止当前入库
+            scope.launch {
+                val db = AppDatabase.getDatabase(applicationContext, scope)
+                db.recordDao().deleteRecentRecordsByAmount(amount, now - 90_000L)
+            }
+            return
+        }
+
         // 1. 唯一订单号持久化拦截：只要微信/支付宝单号曾记过账，绝对直接拦截（终身防重）
         if (!orderId.isNullOrBlank() && AutoRecordDedupeManager.isOrderRecorded(applicationContext, orderId)) {
             return
@@ -729,6 +756,29 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             joined.contains("代扣")
         )) {
             return true
+        }
+
+        // 4. 云闪付 (com.unionpay) 银行卡还款与跨行互转专属指纹拦截
+        if (pkg == "com.unionpay") {
+            // (1) 拦截一切云闪付入账通知（绝大多数为还款到账、跨行转账或信用卡溢缴入账，非商业经营收款）
+            if (joined.contains("入账通知") || joined.contains("汇款入账") || joined.contains("银联入账") ||
+                Regex(""".*尾号为\d{4}的银行卡.*入账.*""").containsMatchIn(joined)) {
+                return true
+            }
+
+            // (2) 拦截纯卡号转出通知 (无任何真实商户名字，仅有“尾号为xxxx的银行卡于...消费xx元”)
+            val hasCardPattern = Regex(""".*尾号为\d{4}的银行卡.*于.*分\s*消费.*""").containsMatchIn(joined) ||
+                                 Regex(""".*尾号为\d{4}的银行卡.*付款成功.*""").containsMatchIn(joined)
+            val hasRealMerchant = partyName.isNotBlank() &&
+                                  partyName != "日常消费" &&
+                                  partyName != "微信转账收款" &&
+                                  !isSystemWord(partyName) &&
+                                  (joined.contains("在【") || joined.contains("向【") || joined.contains("商户") || joined.contains("店"))
+            if (hasCardPattern && !hasRealMerchant) {
+                if (joined.contains("信用卡") || joined.contains("还款") || joined.contains("转账") || joined.contains("对公")) {
+                    return true
+                }
+            }
         }
 
         return false
