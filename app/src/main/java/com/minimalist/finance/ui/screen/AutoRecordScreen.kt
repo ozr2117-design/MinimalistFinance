@@ -372,10 +372,11 @@ fun AutoRecordScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            AppBadge("微信/小程序", "停车费/点餐")
+                            AppBadge("微信/小程序", "停车/扫码")
                             AppBadge("支付宝", "余额/花呗")
+                            AppBadge("淘宝/天猫", "购物/消费")
                             AppBadge("云闪付", "银联银行卡")
-                            AppBadge("美团外卖", "美团支付")
+                            AppBadge("美团/外卖", "美团支付")
                         }
                     }
                 }

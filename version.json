@@ -1,8 +1,8 @@
 {
-  "versionCode": 20,
-  "versionName": "1.1.9",
-  "releaseDate": "2026-10-12",
-  "changelog": "1. 场景1【数据洞察与反馈】：上线「刚需生存 vs 品质享受」双色消费结构透视卡片与心理正反馈建议；新增当月支出 TOP 排行榜与月度财务温度小结\n2. 场景3【轻量预算防暴走】：支持设定本月总预算，动态推算「每日可用建议支出额度」防冲动消费；主记账页顶栏随手直达预算调整",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.9/shubu-v1.1.9.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.1.9/shubu-v1.1.9.apk"
+  "versionCode": 21,
+  "versionName": "1.2.0",
+  "releaseDate": "2026-10-13",
+  "changelog": "1. 适配淘宝全系生态：新增手机淘宝、淘特、天猫、闲鱼支付全流程捕获与智能归集\n2. 修复推荐广告误杀：彻底根除支付成功页底部「猜你喜欢/立即购买」促销卡片触发未付款拦截的隐蔽漏洞\n3. 优化支付宝与订单查账状态机：即时成交订单不再误判为历史查账，整数与分立金额100%精准提取",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.0/shubu-v1.2.0.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.0/shubu-v1.2.0.apk"
 }
