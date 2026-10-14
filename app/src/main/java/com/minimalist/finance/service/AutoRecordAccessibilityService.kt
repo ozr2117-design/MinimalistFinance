@@ -316,12 +316,22 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return
         }
 
+        // 核心排除 1.5：严密拦截一切营销领券、满减活动、红包推广通知（彻底根除云闪付等推送“领88元红包/立减券”误记）
+        val isMarketingNotif = combined.contains("立减") || combined.contains("红包") ||
+                combined.contains("优惠券") || combined.contains("代金券") || combined.contains("立减券") ||
+                combined.contains("消费券") || combined.contains("福利") || combined.contains("免费领") ||
+                combined.contains("最高立减") || combined.contains("抽奖") || combined.contains("享满减") ||
+                combined.contains("满减") || combined.contains("待领取") || combined.contains("已到账礼包")
+        if (isMarketingNotif) {
+            return
+        }
+
         // 核心排除 2：通知中存在未支付 / 待支付等预备状态词
         if (isPrePaymentOrCart(combined)) {
             return
         }
 
-        // 识别微信、支付宝、云闪付的通知（支出或收入）
+        // 识别微信、支付宝、云闪付、淘宝等的通知（支出或收入）
         var notifType: TransactionType? = null
         if (pkg == "com.tencent.mm") {
             if (combined.contains("收款到账") || combined.contains("已收款") || combined.contains("收到转账") ||
@@ -346,21 +356,31 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 combined.contains("花呗") || combined.contains("扣款成功") ||
                 combined.contains("支付凭证") || combined.contains("付款凭证") ||
                 combined.contains("付款支出") || (combined.contains("你有一笔") && combined.contains("支出")) ||
+                combined.contains("付款") || combined.contains("支付") ||
                 combined.contains("停车缴费") || combined.contains("已扣费")) {
+                notifType = TransactionType.EXPENSE
+            }
+        } else if (pkg == "com.unionpay") {
+            if (combined.contains("收款到账") || combined.contains("成功入账")) {
+                notifType = TransactionType.INCOME
+            } else if (combined.contains("付款成功") || combined.contains("支付成功") ||
+                combined.contains("扣款成功") || combined.contains("成功消费") ||
+                combined.contains("消费支出") || combined.contains("银联付款成功")) {
                 notifType = TransactionType.EXPENSE
             }
         } else if (pkg in listOf("com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless", "com.taobao.idlefish")) {
             if (combined.contains("支付成功") || combined.contains("付款成功") || combined.contains("购买成功") ||
-                combined.contains("交易成功") || combined.contains("已付款") || combined.contains("已支付")) {
+                combined.contains("交易成功") || combined.contains("已付款") || combined.contains("已支付") ||
+                combined.contains("等待卖家发货") || combined.contains("买家已付款")) {
                 notifType = TransactionType.EXPENSE
             }
         } else {
             if (combined.contains("收款成功") || combined.contains("收款到账") || combined.contains("入账")) {
                 notifType = TransactionType.INCOME
             } else if (combined.contains("支付成功") || combined.contains("扣款成功") ||
-                combined.contains("付款成功") || combined.contains("消费") ||
-                combined.contains("交易成功") || combined.contains("已扣款") ||
-                combined.contains("停车")) {
+                combined.contains("付款成功") || combined.contains("消费支出") ||
+                combined.contains("成功消费") || combined.contains("交易成功") ||
+                combined.contains("已扣款") || combined.contains("停车")) {
                 notifType = TransactionType.EXPENSE
             }
         }
@@ -418,11 +438,9 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
         val joined = texts.joinToString(" ")
 
-        // 核心防误触 1：微信主界面（包含“通讯录”、“发现”、“我”导航栏）坚决不触碰
-        if (pkg == "com.tencent.mm") {
-            if (texts.contains("通讯录") && texts.contains("发现") && texts.contains("我")) {
-                return
-            }
+        // 核心防误触 1：各应用主界面（首页/导航栏/功能大厅）坚决不触碰，彻底根除“点进云闪付/支付宝无操作被广告误记”
+        if (isAppHomeNavigationScreen(pkg, texts, joined)) {
+            return
         }
 
         // 核心防误触 2：绝对拦截任何【查账、账单列表、历史明细、对账、统计、微信聊天/公众号翻看记录】页面
@@ -455,6 +473,11 @@ class AutoRecordAccessibilityService : AccessibilityService() {
              (joined.contains("取餐号") && !joined.contains("去支付"))) &&
              // 在微信内，必须包含收银台支付结果操作按钮或停车/取餐标志（绝对杜绝服务号消息卡片）
              (joined.contains("完成") || joined.contains("返回商家") || joined.contains("停车") || joined.contains("取餐号"))
+        } else if (pkg == "com.unionpay") {
+            // 云闪付必须是明确的收银台即时凭证（绝不被历史生活缴费卡片“已缴费”误触发）
+            (joined.contains("支付成功") || joined.contains("付款成功") || joined.contains("银联付款成功") ||
+             joined.contains("交易成功") || joined.contains("扣款成功")) &&
+             !joined.contains("生活缴费") && !joined.contains("缴费明细")
         } else {
             joined.contains("支付成功") ||
             joined.contains("付款成功") ||
@@ -462,21 +485,18 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             joined.contains("支付已完成") ||
             joined.contains("购买成功") ||
             joined.contains("买家已付款") ||
+            joined.contains("等待卖家发货") ||
             joined.contains("扫码付款成功") ||
             joined.contains("成功付款") ||
             joined.contains("向商家付款成功") ||
             (joined.contains("支付停车费") && (joined.contains("支付成功") || joined.contains("道闸已抬起"))) ||
             (joined.contains("停车缴费") && (joined.contains("成功") || joined.contains("完成"))) ||
-            joined.contains("缴费成功") ||
-            joined.contains("扣费成功") ||
-            joined.contains("已缴费") ||
             (joined.contains("下单成功") && !joined.contains("待支付")) ||
             (joined.contains("取餐号") && !joined.contains("去支付")) ||
             (joined.contains("订单已完成") && !joined.contains("待付款")) ||
             (joined.contains("订单已支付") && !joined.contains("去结算")) ||
             (joined.contains("特约商户") && (joined.contains("支付成功") || joined.contains("交易成功"))) ||
             joined.contains("扣款成功") ||
-            joined.contains("刷卡成功") ||
             joined.contains("银联付款成功")
         }
 
@@ -508,7 +528,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         if (isShoppingApp) {
             val hasClearShoppingSuccess = joined.contains("支付成功") || joined.contains("付款成功") ||
                     joined.contains("购买成功") || joined.contains("交易成功") || joined.contains("买家已付款") ||
-                    joined.contains("下单成功") || joined.contains("订单已完成") || joined.contains("订单已支付")
+                    joined.contains("等待卖家发货") || joined.contains("下单成功") ||
+                    joined.contains("订单已完成") || joined.contains("订单已支付")
             if (!hasClearShoppingSuccess) {
                 return
             }
@@ -588,8 +609,14 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return
         }
 
-        // 4. 历史旧账单查阅拦截：若单据自带的时间早于当前系统时间 3 分钟以上，说明用户只是在查账/翻阅往期凭证！
-        if (billTimestamp != null && now - billTimestamp > 180_000L) {
+        // 4. 历史旧账单查阅拦截：若单据自带的时间过旧，说明用户只是在查账/翻阅往期凭证！
+        // 电商应用（从提交到支付完成返回）容许10分钟，其余即时收银凭证严格限制3分钟
+        val isShopping = pkg in listOf(
+            "com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless", "com.taobao.idlefish",
+            "com.sankuai.meituan", "com.sankuai.meituan.takeoutnew", "com.jingdong.app.mall", "me.ele"
+        )
+        val maxBillAge = if (isShopping) 600_000L else 180_000L
+        if (billTimestamp != null && now - billTimestamp > maxBillAge) {
             return
         }
 
@@ -686,20 +713,70 @@ class AutoRecordAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * 核心防误触 1：各应用主界面（首页/导航栏/功能大厅）坚决不触碰，彻底根除“点进云闪付/支付宝无操作被广告误记”
+     */
+    private fun isAppHomeNavigationScreen(pkg: String, texts: List<String>, joined: String): Boolean {
+        // 1. 微信主界面 (底栏三要素)
+        if (pkg == "com.tencent.mm") {
+            if (texts.contains("通讯录") && texts.contains("发现") && texts.contains("我")) {
+                return true
+            }
+        }
+        // 2. 云闪付 (com.unionpay) 主界面与服务大厅
+        // 用户仅仅点进云闪付首页，屏幕上常驻“首页/生活/卡管理/我的”或“扫一扫/付款码/乘车码”，绝不可记账！
+        if (pkg == "com.unionpay") {
+            val hasBottomNav = texts.contains("首页") && (texts.contains("生活") || texts.contains("卡管理") || texts.contains("我的") || texts.contains("金融"))
+            val hasTopQuickActions = (texts.contains("扫一扫") || texts.contains("收付款") || texts.contains("付款码")) &&
+                    (texts.contains("乘车码") || texts.contains("转账") || texts.contains("信用卡还款"))
+            if (hasBottomNav || hasTopQuickActions) {
+                return true
+            }
+        }
+        // 3. 支付宝 (com.eg.android.AlipayGphone) 主界面
+        if (pkg == "com.eg.android.AlipayGphone") {
+            if (texts.contains("理财") && texts.contains("生活") && texts.contains("消息") && texts.contains("我的")) {
+                return true
+            }
+            if (texts.contains("扫一扫") && texts.contains("收钱") && texts.contains("付钱") && texts.contains("出行")) {
+                return true
+            }
+        }
+        // 4. 淘宝 (com.taobao.taobao) 主界面
+        if (pkg == "com.taobao.taobao") {
+            if (texts.contains("消息") && texts.contains("购物车") && texts.contains("我的淘宝")) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
      * 核心防误触：绝对拦截任何【查账、账单列表、历史明细、对账、统计、微信聊天/公众号翻看记录】页面
      * 这是彻底杜绝“进微信看付款记录/查账却重复记账”的最高优先级防线！
      */
     private fun isBrowsingHistoryOrChatting(pkg: String, texts: List<String>, joined: String): Boolean {
-        // 1. 微信 / 支付宝 账单列表、交易记录与流水明细页面特征
-        val billHistoryKeywords = listOf(
-            "全部账单", "账单列表", "账单明细", "全部交易类型", "月账单", "年账单", "按月查看",
-            "收支明细", "资金流水", "账单服务", "对此订单有疑问", "对此交易有疑问", "常见问题", "投诉商家",
-            "联系商户", "开发票", "申请开票", "查看往期", "退款明细", "退款记录", "退款进度",
-            "零钱明细", "对账中心", "账单分类", "月度汇总", "账单详情", "交易记录", "我的账单",
-            "查看账单详情", "账单服务", "交易明细"
+        val isShopping = pkg in listOf(
+            "com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless", "com.taobao.idlefish",
+            "com.sankuai.meituan", "com.sankuai.meituan.takeoutnew", "com.jingdong.app.mall", "me.ele"
         )
-        if (billHistoryKeywords.any { joined.contains(it) }) {
+
+        // 1. 微信 / 支付宝 账单列表、交易记录与流水明细页面特征（多条账单集合页）
+        val universalBillKeywords = listOf(
+            "全部账单", "账单列表", "账单明细", "全部交易类型", "月账单", "年账单", "按月查看",
+            "收支明细", "资金流水", "零钱明细", "对账中心", "账单分类", "月度汇总",
+            "交易记录", "我的账单"
+        )
+        if (universalBillKeywords.any { joined.contains(it) }) {
             return true
+        }
+
+        // 售后开票等辅助词：仅在非电商平台（微信/支付宝/云闪付全局查账）中作为拦截依据
+        // 电商订单详情页自带“开发票/联系商户”，绝不因带有发票和联系卖家误杀正常刚完成的订单！
+        if (!isShopping) {
+            val nonShoppingBillKeywords = listOf("开发票", "申请开票", "联系商户", "常见问题", "投诉商家", "退款明细", "退款记录")
+            if (nonShoppingBillKeywords.any { joined.contains(it) }) {
+                return true
+            }
         }
 
         // 2. 核心铁证：针对微信 (com.tencent.mm)，若同时出现“单号/订单号”以及“支付时间/交易时间”，
@@ -711,8 +788,12 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         if (pkg == "com.tencent.mm" && hasOrderIdLabel && hasTimeLabel) {
             return true
         }
-        // 针对所有应用：若出现订单号且伴随售后/对账特征（"对此订单有疑问"、"对此交易有疑问"、"常见问题"、"投诉商家"、"开发票"），拦截！
-        if (hasOrderIdLabel && (joined.contains("对此订单有疑问") || joined.contains("对此交易有疑问") || joined.contains("常见问题") || joined.contains("投诉商家") || joined.contains("开发票"))) {
+        // 针对非电商应用：若出现订单号且伴随售后/对账特征，拦截！
+        if (!isShopping && hasOrderIdLabel && (joined.contains("对此订单有疑问") || joined.contains("对此交易有疑问") || joined.contains("常见问题") || joined.contains("投诉商家") || joined.contains("开发票"))) {
+            return true
+        }
+        // 针对非电商应用的历史账单明细翻查（页面明确为账单详情/交易明细且带有单号和时间）
+        if (!isShopping && (joined.contains("账单详情") || joined.contains("交易明细")) && hasOrderIdLabel && hasTimeLabel) {
             return true
         }
 
@@ -741,9 +822,12 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         }
 
         // 6. 屏幕中出现多笔独立金额（账单列表或聊天记录流的典型特征）
-        val countCurrencies = Regex("""[¥￥]\s*-?\s*[0-9]+""").findAll(joined).count()
-        if (countCurrencies >= 3) {
-            return true
+        // 严格限定于微信 (com.tencent.mm)：电商订单页有原价、店铺满减、优惠券、运费、实付款，多笔金额属于正常现象，绝不可一刀切拦截！
+        if (pkg == "com.tencent.mm") {
+            val countCurrencies = Regex("""[¥￥]\s*-?\s*[0-9]+""").findAll(joined).count()
+            if (countCurrencies >= 3) {
+                return true
+            }
         }
 
         return false
@@ -858,6 +942,35 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         val sdfFull = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.CHINA)
         val sdfShort = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA)
         val regexFull = Regex("""202[0-9][-/.][0-1][0-9][-/.][0-3][0-9]\s+[0-2][0-9]:[0-5][0-9](?::[0-5][0-9])?""")
+
+        // 0. 优先扫描明确的【付款时间 / 支付时间 / 成交时间】（严防被早前几小时甚至几天的“创建时间/下单时间”误导）
+        val payTimeLabels = listOf("付款时间", "支付时间", "成交时间")
+        for (i in texts.indices) {
+            val t = texts[i]
+            for (label in payTimeLabels) {
+                if (t.contains(label)) {
+                    val candidate = t.substringAfter(label)
+                    val m = regexFull.find(candidate)
+                    if (m != null) {
+                        val str = m.value.replace('/', '-').replace('.', '-').trim()
+                        try {
+                            val date = if (str.length > 16) sdfFull.parse(str) else sdfShort.parse(str)
+                            if (date != null) return date.time
+                        } catch (_: Exception) {}
+                    }
+                    if (i + 1 < texts.size) {
+                        val mNext = regexFull.find(texts[i + 1])
+                        if (mNext != null) {
+                            val str = mNext.value.replace('/', '-').replace('.', '-').trim()
+                            try {
+                                val date = if (str.length > 16) sdfFull.parse(str) else sdfShort.parse(str)
+                                if (date != null) return date.time
+                            } catch (_: Exception) {}
+                        }
+                    }
+                }
+            }
+        }
 
         for (t in texts) {
             val m = regexFull.find(t)
@@ -1028,33 +1141,94 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
     // ====== 增强金额提取算法 ======
     private fun extractAmountFromList(texts: List<String>): Double? {
+        // 0. 最高优先级：收银台与电商明确结算标签（实付款/实付/实付金额/实际支付/合计/总计）
+        // 杜绝抓取商品原价、划线价、抵扣券或优惠金额
+        val finalAmountLabels = listOf("实付款", "实付金额", "实际支付", "实付", "总计", "合计")
+        for (i in texts.indices) {
+            val t = texts[i].trim()
+            for (label in finalAmountLabels) {
+                // 形式 A: 标签与金额在同一个节点中 (如 "实付款: ¥23.90", "实付23.90元", "合计：¥88.00")
+                if (t.contains(label)) {
+                    val afterLabel = t.substringAfter(label).trim()
+                    val m = Regex("""[¥￥]?\s*([0-9]+\.?[0-9]*)""").find(afterLabel)
+                    if (m != null) {
+                        val v = m.groupValues[1].toDoubleOrNull()
+                        if (v != null && v > 0) return v
+                    }
+                }
+                // 形式 B: 标签与金额分立于相邻的 1~2 个节点 (如 node i: "实付款", node i+1: "¥", node i+2: "23.90")
+                if (t == label || t == "$label:" || t == "$label：") {
+                    for (offset in 1..2) {
+                        if (i + offset < texts.size) {
+                            val cand = texts[i + offset].trim().removePrefix("¥").removePrefix("￥").removePrefix("-").trim()
+                            val v = cand.toDoubleOrNull()
+                            if (v != null && v > 0) return v
+                            val m = Regex("""[¥￥]?\s*([0-9]+\.?[0-9]*)""").find(texts[i + offset].trim())
+                            if (m != null) {
+                                val v2 = m.groupValues[1].toDoubleOrNull()
+                                if (v2 != null && v2 > 0) return v2
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // 1. 带有货币符号的字符串 (如 "¥ 1.20", "¥1.20", "￥12.50", "-¥4.00", "¥ -4.00", "¥100")
         val regexSymbol = Regex("""[¥￥]\s*-?\s*([0-9]+\.?[0-9]*)""")
         for (t in texts) {
-            val m = regexSymbol.find(t)
+            val trimmed = t.trim()
+            // 排除优惠、立减、抵扣、红包等负向优惠行
+            if (trimmed.startsWith("-") || trimmed.contains("-¥") || trimmed.contains("-￥") ||
+                trimmed.contains("优惠") || trimmed.contains("立减") || trimmed.contains("抵扣") ||
+                trimmed.contains("红包") || trimmed.contains("满减")) {
+                continue
+            }
+            val m = regexSymbol.find(trimmed)
             if (m != null) {
                 val v = m.groupValues[1].toDoubleOrNull()
                 if (v != null && v > 0) return v
             }
         }
+
         // 2. 货币符号与数字分立在相邻节点 (如 node 1: "¥" / "￥", node 2: "1.20" 或 "100")
         for (i in texts.indices) {
             val t = texts[i].trim()
             if ((t == "¥" || t == "￥") && i + 1 < texts.size) {
-                val nextStr = texts[i + 1].trim().removePrefix("-").trim()
-                val v = nextStr.toDoubleOrNull()
+                val prev = if (i > 0) texts[i - 1].trim() else ""
+                if (prev.contains("优惠") || prev.contains("立减") || prev.contains("抵扣") || prev.contains("满减")) {
+                    continue
+                }
+                val nextStr = texts[i + 1].trim()
+                if (nextStr.startsWith("-")) continue
+                val v = nextStr.removePrefix("-").trim().toDoubleOrNull()
                 if (v != null && v > 0) return v
             }
         }
+
         // 3. 带有"元"的文本 (如 "4.00元", "12元", "-4.00元", "100元")
         val regexYuan = Regex("""(?:^|[^\d])-?\s*([0-9]+\.?[0-9]*)\s*元""")
         for (t in texts) {
-            val m = regexYuan.find(t)
+            val trimmed = t.trim()
+            if (trimmed.startsWith("-") || trimmed.contains("优惠") || trimmed.contains("立减") || trimmed.contains("满减")) {
+                continue
+            }
+            val m = regexYuan.find(trimmed)
             if (m != null) {
                 val v = m.groupValues[1].toDoubleOrNull()
                 if (v != null && v > 0) return v
             }
         }
+
+        // 3.1 金额与"元"分立在相邻节点 (如 node 1: "15.00", node 2: "元", 常见于支付宝与淘宝收银台)
+        for (i in texts.indices) {
+            if (i + 1 < texts.size && texts[i + 1].trim() == "元") {
+                val cand = texts[i].trim().removePrefix("-").trim()
+                val v = cand.toDoubleOrNull()
+                if (v != null && v > 0) return v
+            }
+        }
+
         // 4. 独立纯金额节点 (如 "-4.00", "4.00", "12.50", "128.00", 兼容一位或两位小数)
         for (t in texts) {
             val cleaned = t.trim().removePrefix("-").trim()
@@ -1063,6 +1237,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 if (v != null && v > 0) return v
             }
         }
+
         // 5. 紧随在"实付款"、"金额"、"合计"、"付款成功"、"支付成功"标签后面的纯数值 (支持整数 "100")
         val amountPrefixes = listOf("实付款", "金额", "合计", "成功付款", "付款成功", "支付成功", "总计")
         for (i in texts.indices) {
@@ -1097,7 +1272,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             val v = m2.groupValues[1].toDoubleOrNull()
             if (v != null && v > 0) return v
         }
-        val regexPure = Regex("""(?:支付|消费|扣款|转账|收款|到账|支出)?\s*-?\s*([0-9]+(?:\.[0-9]{1,2})?)\s*元?""")
+        val regexPure = Regex("""(?:支付|消费|扣款|转账|收款|到账|支出|付款)\s*[:：]?\s*-?\s*([0-9]+(?:\.[0-9]{1,2})?)""")
         val m3 = regexPure.find(text)
         if (m3 != null) {
             val v = m3.groupValues[1].toDoubleOrNull()
@@ -1227,6 +1402,11 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         val m3 = Regex("""在\s*(.*?)\s*(消费|支出|刷卡|支付)""").find(text)
         if (m3 != null) {
             val name = m3.groupValues[1].trim()
+            if (name.isNotEmpty() && !isSystemWord(name)) return name
+        }
+        val m4 = Regex("""(?:购买|宝贝|商品)的?【(.*?)】""").find(text)
+        if (m4 != null) {
+            val name = m4.groupValues[1].trim()
             if (name.isNotEmpty() && !isSystemWord(name)) return name
         }
         return ""

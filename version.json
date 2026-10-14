@@ -1,8 +1,8 @@
 {
-  "versionCode": 21,
-  "versionName": "1.2.0",
-  "releaseDate": "2026-10-13",
-  "changelog": "1. 适配淘宝全系生态：新增手机淘宝、淘特、天猫、闲鱼支付全流程捕获与智能归集\n2. 修复推荐广告误杀：彻底根除支付成功页底部「猜你喜欢/立即购买」促销卡片触发未付款拦截的隐蔽漏洞\n3. 优化支付宝与订单查账状态机：即时成交订单不再误判为历史查账，整数与分立金额100%精准提取",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.0/shubu-v1.2.0.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.0/shubu-v1.2.0.apk"
+  "versionCode": 22,
+  "versionName": "1.2.1",
+  "releaseDate": "2026-10-14",
+  "changelog": "1. 彻底根除云闪付首页广告误记：新增支付App主界面与服务大厅全面免疫，杜绝打开云闪付扫到营销卡片自动记账88元\n2. 修复淘宝与电商多金额误杀：将「实付款/实付/总计/合计」提至最高第0优先级，豁免电商发票与售后误判，精准捕获「等待卖家发货」与收银台全链路\n3. 优化通知日期与金额正则：修复动账通知中因日期（如10月14日）导致金额误捕为10元的底层缺陷，支持从淘宝推送中智能提取商品名称",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.1/shubu-v1.2.1.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.1/shubu-v1.2.1.apk"
 }
