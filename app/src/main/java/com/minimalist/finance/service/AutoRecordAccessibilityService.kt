@@ -256,10 +256,13 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                 handleWindow(pkg, event)
-                // 若为状态初次切换，微延时 300ms 兜底重试一次（解决微信内嵌 Web 渲染延迟）
+                // 若为状态初次切换，微延时 300ms 兜底重试一次（解决微信内嵌 Web 渲染延迟与支付宝/淘宝多层跳转回跳时机）
                 if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
                     mainHandler.postDelayed({
-                        handleWindow(pkg, null)
+                        val currentPkg = rootInActiveWindow?.packageName?.toString() ?: pkg
+                        if (isPaymentApp(currentPkg)) {
+                            handleWindow(currentPkg, null)
+                        }
                     }, 300L)
                 }
             }
@@ -402,6 +405,14 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
     // ====== 通道 2：页面节点解析逻辑 ======
     private fun handleWindow(pkg: String, event: AccessibilityEvent?) {
+        // 若为延时兜底重试任务（event == null），先校验当前前台活动包名：若用户已按 Home 退出或切走，坚决不解析残留后台节点！
+        if (event == null) {
+            val currentActivePkg = rootInActiveWindow?.packageName?.toString()
+            if (currentActivePkg != null && currentActivePkg != pkg) {
+                return
+            }
+        }
+
         // 多维度聚合节点：event.source + rootInActiveWindow + windows 交互窗口列表
         val nodesToInspect = mutableListOf<AccessibilityNodeInfo>()
         event?.source?.let {
@@ -420,6 +431,10 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 val winPkg = root.packageName?.toString()
                 // 彻底排除系统状态栏与导航栏窗口，严防将状态栏网速 (如 6.68KB/s)、电量、时间混入页面节点！
                 if (winPkg == "com.android.systemui" || win.type == AccessibilityWindowInfo.TYPE_SYSTEM) {
+                    return@forEach
+                }
+                // 排除过渡动画中残留的非活动或最小化窗口
+                if (win.type != AccessibilityWindowInfo.TYPE_APPLICATION && !win.isFocused) {
                     return@forEach
                 }
                 if (winPkg == pkg && !nodesToInspect.contains(root)) {
@@ -474,10 +489,16 @@ class AutoRecordAccessibilityService : AccessibilityService() {
              // 在微信内，必须包含收银台支付结果操作按钮或停车/取餐标志（绝对杜绝服务号消息卡片）
              (joined.contains("完成") || joined.contains("返回商家") || joined.contains("停车") || joined.contains("取餐号"))
         } else if (pkg == "com.unionpay") {
-            // 云闪付必须是明确的收银台即时凭证（绝不被历史生活缴费卡片“已缴费”误触发）
-            (joined.contains("支付成功") || joined.contains("付款成功") || joined.contains("银联付款成功") ||
-             joined.contains("交易成功") || joined.contains("扣款成功")) &&
-             !joined.contains("生活缴费") && !joined.contains("缴费明细")
+            // 云闪付必须是明确的收银台即时凭证（绝不被历史生活缴费卡片“已缴费”或首页营销立减广告误触发）
+            val hasUnionpaySuccess = (joined.contains("支付成功") || joined.contains("付款成功") || joined.contains("银联付款成功") ||
+                    (joined.contains("交易成功") && !joined.contains("优惠")) ||
+                    (joined.contains("扣款成功") && (joined.contains("商户") || joined.contains("店") || joined.contains("元"))))
+            val isMarketingOrAd = joined.contains("生活缴费") || joined.contains("缴费明细") ||
+                    joined.contains("立减") || joined.contains("优惠券") || joined.contains("红包") ||
+                    joined.contains("营销") || joined.contains("示例") || joined.contains("天天立减") ||
+                    joined.contains("最高立减") || joined.contains("满减") || joined.contains("待领取") ||
+                    joined.contains("活动") || joined.contains("专享")
+            hasUnionpaySuccess && !isMarketingOrAd
         } else {
             joined.contains("支付成功") ||
             joined.contains("付款成功") ||
@@ -529,7 +550,9 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             val hasClearShoppingSuccess = joined.contains("支付成功") || joined.contains("付款成功") ||
                     joined.contains("购买成功") || joined.contains("交易成功") || joined.contains("买家已付款") ||
                     joined.contains("等待卖家发货") || joined.contains("下单成功") ||
-                    joined.contains("订单已完成") || joined.contains("订单已支付")
+                    joined.contains("订单已完成") || joined.contains("订单已支付") ||
+                    joined.contains("免密支付成功") || joined.contains("自动扣款成功") ||
+                    joined.contains("已成功付款")
             if (!hasClearShoppingSuccess) {
                 return
             }
@@ -693,8 +716,9 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             )
             db.recordDao().insertRecord(record)
 
-            // 写入持久化防重存储
+            // 写入持久化防重存储与防抖缓存（入库成功后方显式占位，确保幂等）
             AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
+            AutoRecordDedupeManager.markDebounced(pkg, type, amount)
 
             com.minimalist.finance.util.MilestoneEncouragementManager.checkAndCelebrate(applicationContext, scope)
 
@@ -743,6 +767,12 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         }
         // 4. 淘宝 (com.taobao.taobao) 主界面
         if (pkg == "com.taobao.taobao") {
+            // 如果页面已明确包含支付成功、买家已付款、等待卖家发货，绝不能误当成主界面拦截！
+            val hasExplicitSuccess = joined.contains("买家已付款") || joined.contains("等待卖家发货") ||
+                    joined.contains("支付成功") || joined.contains("付款成功") || joined.contains("免密支付成功")
+            if (hasExplicitSuccess) {
+                return false
+            }
             if (texts.contains("消息") && texts.contains("购物车") && texts.contains("我的淘宝")) {
                 return true
             }

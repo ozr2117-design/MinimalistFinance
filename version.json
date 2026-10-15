@@ -1,8 +1,8 @@
 {
-  "versionCode": 22,
-  "versionName": "1.2.1",
-  "releaseDate": "2026-10-14",
-  "changelog": "1. 彻底根除云闪付首页广告误记：新增支付App主界面与服务大厅全面免疫，杜绝打开云闪付扫到营销卡片自动记账88元\n2. 修复淘宝与电商多金额误杀：将「实付款/实付/总计/合计」提至最高第0优先级，豁免电商发票与售后误判，精准捕获「等待卖家发货」与收银台全链路\n3. 优化通知日期与金额正则：修复动账通知中因日期（如10月14日）导致金额误捕为10元的底层缺陷，支持从淘宝推送中智能提取商品名称",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.1/shubu-v1.2.1.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.1/shubu-v1.2.1.apk"
+  "versionCode": 23,
+  "versionName": "1.2.2",
+  "releaseDate": "2026-10-15",
+  "changelog": "1. 彻底解决淘宝与支付宝跳转漏记：重构防抖机制为只读判断+成功后显式占位，根除临时浮层提前占位导致的真实账单误杀\n2. 修复多层跳转延时包名竞态：延时重试动态获取当前前台真实活动应用，杜绝支付宝闪退回跳淘宝时窗口属主错位\n3. 豁免淘宝订单成功页误杀：包含买家已付款、等待卖家发货等状态时不再因底栏误判为主界面\n4. 杜绝云闪付切前台与退出空跳：剔除非活动过渡窗口与营销广告卡片穿透，对冲引擎增加原子同步锁与安全持久化",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.2/shubu-v1.2.2.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.2/shubu-v1.2.2.apk"
 }

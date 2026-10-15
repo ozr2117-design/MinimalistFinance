@@ -70,15 +70,22 @@ object AutoRecordDedupeManager {
     }
 
     /**
-     * 短时间内存防抖判定 (如 60 秒内同应用同金额同类型)
+     * 短时间内存防抖只读检查 (如 60 秒内同应用同金额同类型是否已被记录)
+     * 绝不提前占用时间戳，彻底避免因页面前置校验未通过而导致的 60 秒死锁误杀！
      */
     fun isDebounced(pkg: String, type: TransactionType, amount: Double, windowMs: Long = 60_000L): Boolean {
         val now = System.currentTimeMillis()
         val key = "$pkg-${type.name}-${String.format(Locale.US, "%.2f", amount)}"
         val lastTime = debounceCache[key] ?: 0L
-        if (now - lastTime < windowMs) {
-            return true
-        }
+        return (now - lastTime < windowMs)
+    }
+
+    /**
+     * 显式标记完成防抖占用（仅在确认真正执行入库时调用，确保幂等）
+     */
+    fun markDebounced(pkg: String, type: TransactionType, amount: Double) {
+        val now = System.currentTimeMillis()
+        val key = "$pkg-${type.name}-${String.format(Locale.US, "%.2f", amount)}"
         debounceCache[key] = now
         // 清理超过 10 分钟的防抖缓存
         if (debounceCache.size > 200) {
@@ -90,13 +97,14 @@ object AutoRecordDedupeManager {
                 }
             }
         }
-        return false
     }
 
     /**
      * 云闪付/银行卡内部转账与还款双向对冲检测:
      * 若在短时间 (90 秒内) 发生同包名同金额但相反收支类型 (一进一出) 的交易，判定为互转/还款对冲，返回 true
+     * 加注同步锁，确保复合读取与写入的绝对原子性
      */
+    @Synchronized
     fun checkAndRegisterHedge(pkg: String, type: TransactionType, amount: Double, windowMs: Long = 90_000L): Boolean {
         val now = System.currentTimeMillis()
         val key = "$pkg-${String.format(Locale.US, "%.2f", amount)}"
@@ -145,16 +153,20 @@ object AutoRecordDedupeManager {
         }
     }
 
+    private val persistLock = Any()
+
     private fun saveToPreferencesAsync(context: Context) {
-        try {
-            val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            val orders = memoryOrderCache.keys.toList().takeLast(MAX_STORED_COUNT).toSet()
-            val fps = memoryFingerprintCache.keys.toList().takeLast(MAX_STORED_COUNT).toSet()
-            sp.edit()
-                .putStringSet(KEY_ORDERS, orders)
-                .putStringSet(KEY_FINGERPRINTS, fps)
-                .apply()
-        } catch (_: Exception) {}
+        synchronized(persistLock) {
+            try {
+                val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                val orders = HashSet(memoryOrderCache.keys.toList().takeLast(MAX_STORED_COUNT))
+                val fps = HashSet(memoryFingerprintCache.keys.toList().takeLast(MAX_STORED_COUNT))
+                sp.edit()
+                    .putStringSet(KEY_ORDERS, orders)
+                    .putStringSet(KEY_FINGERPRINTS, fps)
+                    .apply()
+            } catch (_: Exception) {}
+        }
     }
 
     /**
