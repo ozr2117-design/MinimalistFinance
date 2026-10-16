@@ -1,8 +1,8 @@
 {
-  "versionCode": 23,
-  "versionName": "1.2.2",
-  "releaseDate": "2026-10-15",
-  "changelog": "1. 彻底解决淘宝与支付宝跳转漏记：重构防抖机制为只读判断+成功后显式占位，根除临时浮层提前占位导致的真实账单误杀\n2. 修复多层跳转延时包名竞态：延时重试动态获取当前前台真实活动应用，杜绝支付宝闪退回跳淘宝时窗口属主错位\n3. 豁免淘宝订单成功页误杀：包含买家已付款、等待卖家发货等状态时不再因底栏误判为主界面\n4. 杜绝云闪付切前台与退出空跳：剔除非活动过渡窗口与营销广告卡片穿透，对冲引擎增加原子同步锁与安全持久化",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.2/shubu-v1.2.2.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.2/shubu-v1.2.2.apk"
+  "versionCode": 24,
+  "versionName": "1.2.3",
+  "releaseDate": "2026-10-16",
+  "changelog": "1. 彻底解决淘宝实物购物漏记：豁免'全部/筛选'排他规则对电商订单完成页'猜你喜欢'推荐流的误判\n2. 增加支付成功关键词豁免：订单已完成时推荐卡片包含'需付款'等提示不再一票否决\n3. 增强实付金额多层解析：扩大实付款与金额节点搜索跨度至1~4层，支持样式拆分小数拼接\n4. 适配电商Weex/Flutter异步渲染：优化无障碍内容变化延迟探测与hintText属性兼容",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.3/shubu-v1.2.3.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.3/shubu-v1.2.3.apk"
 }

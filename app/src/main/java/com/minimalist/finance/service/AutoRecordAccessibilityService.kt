@@ -256,14 +256,15 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                 handleWindow(pkg, event)
-                // 若为状态初次切换，微延时 300ms 兜底重试一次（解决微信内嵌 Web 渲染延迟与支付宝/淘宝多层跳转回跳时机）
+                // 若为状态初次切换，微延时 300ms/500ms 兜底重试一次（解决微信内嵌 Web 渲染延迟与电商/支付宝多层跳转回跳时机）
                 if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                    val delay = if (pkg in listOf("com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless", "com.taobao.idlefish")) 500L else 300L
                     mainHandler.postDelayed({
                         val currentPkg = rootInActiveWindow?.packageName?.toString() ?: pkg
                         if (isPaymentApp(currentPkg)) {
                             handleWindow(currentPkg, null)
                         }
-                    }, 300L)
+                    }, delay)
                 }
             }
         }
@@ -507,6 +508,10 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             joined.contains("购买成功") ||
             joined.contains("买家已付款") ||
             joined.contains("等待卖家发货") ||
+            joined.contains("等待商家发货") ||
+            joined.contains("已成功付款") ||
+            joined.contains("免密支付成功") ||
+            joined.contains("自动扣款成功") ||
             joined.contains("扫码付款成功") ||
             joined.contains("成功付款") ||
             joined.contains("向商家付款成功") ||
@@ -528,10 +533,16 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         }
 
         // 核心防误触 3：若已判定支出或收入，检查界面是否明确处于主订单未支付动作中
-        // 注意：若已经明确支付成功，底部的广告推荐词（如“立即购买/加入购物车/去拼单”）绝不误杀！
+        // 注意：若已经明确支付成功，底部的广告推荐词（如“需付款/立即购买/加入购物车/去拼单”）绝不误杀！
+        val hasExplicitSuccess = joined.contains("支付成功") || joined.contains("付款成功") ||
+                joined.contains("交易成功") || joined.contains("买家已付款") ||
+                joined.contains("等待卖家发货") || joined.contains("等待商家发货") ||
+                joined.contains("订单已完成") || joined.contains("订单已支付") ||
+                joined.contains("免密支付成功") || joined.contains("自动扣款成功") ||
+                joined.contains("已成功付款") || joined.contains("购买成功")
         val hasPendingPaymentAction = joined.contains("未完成支付") || joined.contains("放弃支付") ||
                 joined.contains("订单待付款") || joined.contains("需付款") || joined.contains("合计待支付")
-        if (hasPendingPaymentAction) {
+        if (hasPendingPaymentAction && !hasExplicitSuccess) {
             return
         }
 
@@ -769,7 +780,11 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         if (pkg == "com.taobao.taobao") {
             // 如果页面已明确包含支付成功、买家已付款、等待卖家发货，绝不能误当成主界面拦截！
             val hasExplicitSuccess = joined.contains("买家已付款") || joined.contains("等待卖家发货") ||
-                    joined.contains("支付成功") || joined.contains("付款成功") || joined.contains("免密支付成功")
+                    joined.contains("等待商家发货") || joined.contains("支付成功") ||
+                    joined.contains("付款成功") || joined.contains("免密支付成功") ||
+                    joined.contains("自动扣款成功") || joined.contains("交易成功") ||
+                    joined.contains("订单已完成") || joined.contains("订单已支付") ||
+                    joined.contains("已成功付款") || joined.contains("购买成功")
             if (hasExplicitSuccess) {
                 return false
             }
@@ -827,8 +842,9 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return true
         }
 
-        // 3. 筛选与统计特征：包含“筛选”且包含“统计”或“全部”
-        if (joined.contains("筛选") && (joined.contains("统计") || joined.contains("全部") || joined.contains("类型") || joined.contains("金额"))) {
+        // 3. 筛选与统计特征：仅在非电商平台（微信/支付宝/云闪付全局查账）拦截“筛选 + 统计/全部/类型/金额”
+        // 电商订单完成页自带“全部宝贝/猜你喜欢/筛选”，绝不在此误杀！
+        if (!isShopping && joined.contains("筛选") && (joined.contains("统计") || joined.contains("全部") || joined.contains("类型") || joined.contains("金额"))) {
             return true
         }
 
@@ -1163,6 +1179,12 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             val str = it.toString().trim()
             if (str.isNotEmpty()) list.add(str)
         }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            node.hintText?.let {
+                val str = it.toString().trim()
+                if (str.isNotEmpty()) list.add(str)
+            }
+        }
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             collectTexts(child, list)
@@ -1186,14 +1208,27 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                         if (v != null && v > 0) return v
                     }
                 }
-                // 形式 B: 标签与金额分立于相邻的 1~2 个节点 (如 node i: "实付款", node i+1: "¥", node i+2: "23.90")
-                if (t == label || t == "$label:" || t == "$label：") {
-                    for (offset in 1..2) {
+                // 形式 B: 标签与金额分立于相邻的 1~4 个节点 (如 node i: "实付款", node i+1: "¥", node i+2: "23.90")
+                // 在 Weex / Compose 复杂渲染树下，金额与标签间可能有样式容器或货币符号，支持多节点跨度与拆分小数拼接
+                if (t == label || t == "$label:" || t == "$label：" || (t.startsWith(label) && t.length <= label.length + 4)) {
+                    for (offset in 1..4) {
                         if (i + offset < texts.size) {
-                            val cand = texts[i + offset].trim().removePrefix("¥").removePrefix("￥").removePrefix("-").trim()
-                            val v = cand.toDoubleOrNull()
+                            val rawCand = texts[i + offset].trim()
+                            if (rawCand == "¥" || rawCand == "￥" || rawCand.isEmpty() ||
+                                rawCand.startsWith("含运费") || rawCand.startsWith("（含运费")) {
+                                continue
+                            }
+                            var combinedAmountStr = rawCand.removePrefix("¥").removePrefix("￥").removePrefix("-").trim()
+                            // 若后续紧随独立的小数点角标节点 (如 node A: "29", node B: ".90" 或 "90")
+                            if (i + offset + 1 < texts.size) {
+                                val nextDec = texts[i + offset + 1].trim()
+                                if (nextDec.startsWith(".") && nextDec.length in 2..3 && nextDec.substring(1).all { it.isDigit() }) {
+                                    combinedAmountStr += nextDec
+                                }
+                            }
+                            val v = combinedAmountStr.toDoubleOrNull()
                             if (v != null && v > 0) return v
-                            val m = Regex("""[¥￥]?\s*([0-9]+\.?[0-9]*)""").find(texts[i + offset].trim())
+                            val m = Regex("""[¥￥]?\s*([0-9]+\.?[0-9]*)""").find(rawCand)
                             if (m != null) {
                                 val v2 = m.groupValues[1].toDoubleOrNull()
                                 if (v2 != null && v2 > 0) return v2
