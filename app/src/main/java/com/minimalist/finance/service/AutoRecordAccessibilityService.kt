@@ -660,14 +660,20 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             "com.unionpay" -> "银行卡"
             "com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless", "com.taobao.idlefish" -> "支付宝"
             "com.sankuai.meituan", "com.sankuai.meituan.takeoutnew" -> "美团"
-            "com.jingdong.app.mall" -> "微信"
+            "com.jingdong.app.mall" -> "京东支付"
             else -> "支付宝"
         }
 
         val displayName = if (partyName.isNotBlank() && !isSystemWord(partyName)) {
             partyName
         } else {
-            if (type == TransactionType.INCOME) "微信转账收款" else "日常消费"
+            when {
+                type == TransactionType.INCOME -> "微信转账收款"
+                pkg == "com.jingdong.app.mall" -> if (rawContext.contains("外卖") || rawContext.contains("送达") || rawContext.contains("骑手")) "京东外卖" else "京东购物"
+                pkg in listOf("com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless") -> "淘宝购物"
+                pkg in listOf("com.sankuai.meituan", "com.sankuai.meituan.takeoutnew") -> "美团外卖"
+                else -> "日常消费"
+            }
         }
 
         val catName = classifyCategory("$displayName $rawContext", type)
@@ -1112,6 +1118,19 @@ class AutoRecordAccessibilityService : AccessibilityService() {
     }
 
 
+    // 金额噪声排他：余额类、优惠红包类、卡类、返利类，坚决不可作为消费金额
+    private fun isAmountNoise(text: String): Boolean {
+        val lower = text.lowercase()
+        return lower.contains("余额") || lower.contains("可用") || lower.contains("账户余额") ||
+               lower.contains("卡余额") || lower.contains("零钱余额") || lower.contains("储值") ||
+               lower.contains("e卡") || lower.contains("礼品卡") || lower.contains("购物卡") ||
+               lower.contains("红包") || lower.contains("优惠") || lower.contains("立减") ||
+               lower.contains("满减") || lower.contains("抵扣") || lower.contains("京豆") ||
+               lower.contains("淘金币") || lower.contains("积分") || lower.contains("返利") ||
+               lower.contains("省¥") || lower.contains("省￥") || lower.contains("运费险") ||
+               lower.contains("原价") || lower.contains("划线价")
+    }
+
     private fun isSystemWord(word: String): Boolean {
         val cleaned = word.trim()
         if (cleaned.isEmpty()) return true
@@ -1129,10 +1148,22 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return true
         }
 
-        // 3. 常见业务系统关键字
+        // 3. 优惠券、红包、立减金与营销文本（如 "0.01元红包", "5元立减券", "平台优惠" 等绝非商户名）
+        if (cleaned.contains("红包") || cleaned.contains("优惠券") || cleaned.contains("代金券") ||
+            cleaned.contains("立减券") || cleaned.contains("消费券") || cleaned.contains("抵扣券") ||
+            cleaned.contains("满减") || cleaned.contains("抵扣") || cleaned.contains("京豆") ||
+            cleaned.contains("淘金币") || cleaned.contains("返利")) {
+            return true
+        }
+        if (cleaned.matches(Regex("""^[0-9]+(\.[0-9]+)?元?(红包|优惠|券|立减|抵扣|满减).*"""))) {
+            return true
+        }
+
+        // 4. 常见业务系统关键字
         return cleaned in listOf(
-            "微信支付", "支付宝", "支付成功", "付款成功", "交易成功", "完成", "收款成功", "账单详情", "人民币",
-            "零钱余额", "转账时间", "收款时间", "你已收款", "资金已存入零钱", "你已收款，资金已存入零钱",
+            "微信支付", "支付宝", "京东支付", "京东白条", "京东E卡", "E卡", "礼品卡", "购物卡",
+            "支付成功", "付款成功", "交易成功", "完成", "收款成功", "账单详情", "人民币",
+            "零钱余额", "账户余额", "卡余额", "转账时间", "收款时间", "你已收款", "资金已存入零钱", "你已收款，资金已存入零钱",
             "微信支付凭证", "付款凭证", "支付方式", "扣款成功", "交易明细", "查看账单", "查看详情",
             "返回商家", "关闭", "确定", "返回", "商家小程序", "我的订单", "取餐号", "订单已完成",
             "全部账单", "常见问题", "账单服务", "退款", "退款成功", "退款申请", "退款中", "退款明细", "退款结果",
@@ -1166,6 +1197,17 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         if (pkg == "com.eg.android.AlipayGphone" && (joined.contains("花呗") || joined.contains("花呗分期"))) {
             return "花呗"
         }
+        if (pkg == "com.jingdong.app.mall") {
+            if (joined.contains("京东白条") || joined.contains("白条")) {
+                return "京东白条"
+            }
+            if (joined.contains("京东E卡") || joined.contains("E卡") || joined.contains("礼品卡")) {
+                return "京东E卡"
+            }
+            if (joined.contains("京东支付")) {
+                return "京东支付"
+            }
+        }
         return null
     }
 
@@ -1193,23 +1235,23 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
     // ====== 增强金额提取算法 ======
     private fun extractAmountFromList(texts: List<String>): Double? {
-        // 0. 最高优先级：收银台与电商明确结算标签（实付款/实付/实付金额/实际支付/合计/总计）
+        // 0. 最高优先级：收银台与电商明确结算标签（实付款/实付/实付金额/实际支付/应付金额/总计/合计）
         // 杜绝抓取商品原价、划线价、抵扣券或优惠金额
-        val finalAmountLabels = listOf("实付款", "实付金额", "实际支付", "实付", "总计", "合计")
+        val finalAmountLabels = listOf("实付款", "实付金额", "实际支付", "实付", "应付金额", "总计", "合计")
         for (i in texts.indices) {
             val t = texts[i].trim()
             for (label in finalAmountLabels) {
-                // 形式 A: 标签与金额在同一个节点中 (如 "实付款: ¥23.90", "实付23.90元", "合计：¥88.00")
+                // 形式 A: 标签与金额在同一个节点中 (如 "实付款: ¥23.90", "实付23.90元", "合计：¥88.00", "实付款: ¥0.00")
                 if (t.contains(label)) {
                     val afterLabel = t.substringAfter(label).trim()
                     val m = Regex("""[¥￥]?\s*([0-9]+\.?[0-9]*)""").find(afterLabel)
                     if (m != null) {
                         val v = m.groupValues[1].toDoubleOrNull()
-                        if (v != null && v > 0) return v
+                        // 关键修复：允许 v >= 0.0！若实付款明确为 0.00，立即返回 0.0，绝不跌入备用规则误抓余额！
+                        if (v != null && v >= 0.0) return v
                     }
                 }
-                // 形式 B: 标签与金额分立于相邻的 1~4 个节点 (如 node i: "实付款", node i+1: "¥", node i+2: "23.90")
-                // 在 Weex / Compose 复杂渲染树下，金额与标签间可能有样式容器或货币符号，支持多节点跨度与拆分小数拼接
+                // 形式 B: 标签与金额分立于相邻的 1~4 个节点 (如 node i: "实付款", node i+1: "¥", node i+2: "23.90" 或 "0.00")
                 if (t == label || t == "$label:" || t == "$label：" || (t.startsWith(label) && t.length <= label.length + 4)) {
                     for (offset in 1..4) {
                         if (i + offset < texts.size) {
@@ -1219,7 +1261,6 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                                 continue
                             }
                             var combinedAmountStr = rawCand.removePrefix("¥").removePrefix("￥").removePrefix("-").trim()
-                            // 若后续紧随独立的小数点角标节点 (如 node A: "29", node B: ".90" 或 "90")
                             if (i + offset + 1 < texts.size) {
                                 val nextDec = texts[i + offset + 1].trim()
                                 if (nextDec.startsWith(".") && nextDec.length in 2..3 && nextDec.substring(1).all { it.isDigit() }) {
@@ -1227,11 +1268,11 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                                 }
                             }
                             val v = combinedAmountStr.toDoubleOrNull()
-                            if (v != null && v > 0) return v
+                            if (v != null && v >= 0.0) return v
                             val m = Regex("""[¥￥]?\s*([0-9]+\.?[0-9]*)""").find(rawCand)
                             if (m != null) {
                                 val v2 = m.groupValues[1].toDoubleOrNull()
-                                if (v2 != null && v2 > 0) return v2
+                                if (v2 != null && v2 >= 0.0) return v2
                             }
                         }
                     }
@@ -1240,16 +1281,15 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         }
 
         // 1. 带有货币符号的字符串 (如 "¥ 1.20", "¥1.20", "￥12.50", "-¥4.00", "¥ -4.00", "¥100")
+        // 严格排除余额、红包、优惠、立减等噪声节点，防止抓到卡余额
         val regexSymbol = Regex("""[¥￥]\s*-?\s*([0-9]+\.?[0-9]*)""")
-        for (t in texts) {
-            val trimmed = t.trim()
-            // 排除优惠、立减、抵扣、红包等负向优惠行
-            if (trimmed.startsWith("-") || trimmed.contains("-¥") || trimmed.contains("-￥") ||
-                trimmed.contains("优惠") || trimmed.contains("立减") || trimmed.contains("抵扣") ||
-                trimmed.contains("红包") || trimmed.contains("满减")) {
+        for (i in texts.indices) {
+            val t = texts[i].trim()
+            val prev = if (i > 0) texts[i - 1].trim() else ""
+            if (isAmountNoise(t) || isAmountNoise(prev) || t.startsWith("-") || t.contains("-¥") || t.contains("-￥")) {
                 continue
             }
-            val m = regexSymbol.find(trimmed)
+            val m = regexSymbol.find(t)
             if (m != null) {
                 val v = m.groupValues[1].toDoubleOrNull()
                 if (v != null && v > 0) return v
@@ -1261,11 +1301,10 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             val t = texts[i].trim()
             if ((t == "¥" || t == "￥") && i + 1 < texts.size) {
                 val prev = if (i > 0) texts[i - 1].trim() else ""
-                if (prev.contains("优惠") || prev.contains("立减") || prev.contains("抵扣") || prev.contains("满减")) {
+                val nextStr = texts[i + 1].trim()
+                if (isAmountNoise(prev) || isAmountNoise(nextStr) || nextStr.startsWith("-")) {
                     continue
                 }
-                val nextStr = texts[i + 1].trim()
-                if (nextStr.startsWith("-")) continue
                 val v = nextStr.removePrefix("-").trim().toDoubleOrNull()
                 if (v != null && v > 0) return v
             }
@@ -1273,51 +1312,60 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
         // 3. 带有"元"的文本 (如 "4.00元", "12元", "-4.00元", "100元")
         val regexYuan = Regex("""(?:^|[^\d])-?\s*([0-9]+\.?[0-9]*)\s*元""")
-        for (t in texts) {
-            val trimmed = t.trim()
-            if (trimmed.startsWith("-") || trimmed.contains("优惠") || trimmed.contains("立减") || trimmed.contains("满减")) {
+        for (i in texts.indices) {
+            val t = texts[i].trim()
+            val prev = if (i > 0) texts[i - 1].trim() else ""
+            if (isAmountNoise(t) || isAmountNoise(prev) || t.startsWith("-")) {
                 continue
             }
-            val m = regexYuan.find(trimmed)
+            val m = regexYuan.find(t)
             if (m != null) {
                 val v = m.groupValues[1].toDoubleOrNull()
                 if (v != null && v > 0) return v
             }
         }
 
-        // 3.1 金额与"元"分立在相邻节点 (如 node 1: "15.00", node 2: "元", 常见于支付宝与淘宝收银台)
+        // 3.1 金额与"元"分立在相邻节点 (如 node 1: "15.00", node 2: "元")
         for (i in texts.indices) {
             if (i + 1 < texts.size && texts[i + 1].trim() == "元") {
+                val prev = if (i > 0) texts[i - 1].trim() else ""
                 val cand = texts[i].trim().removePrefix("-").trim()
+                if (isAmountNoise(prev) || isAmountNoise(cand)) continue
                 val v = cand.toDoubleOrNull()
                 if (v != null && v > 0) return v
             }
         }
 
-        // 4. 独立纯金额节点 (如 "-4.00", "4.00", "12.50", "128.00", 兼容一位或两位小数)
-        for (t in texts) {
-            val cleaned = t.trim().removePrefix("-").trim()
+        // 4. 独立纯金额节点 (如 "12.50", "128.00", 兼容一位或两位小数)
+        for (i in texts.indices) {
+            val t = texts[i].trim()
+            val prev = if (i > 0) texts[i - 1].trim() else ""
+            if (isAmountNoise(t) || isAmountNoise(prev) || t.startsWith("-")) continue
+            val cleaned = t.removePrefix("-").trim()
             if (cleaned.matches(Regex("""^[0-9]+\.[0-9]{1,2}$"""))) {
                 val v = cleaned.toDoubleOrNull()
                 if (v != null && v > 0) return v
             }
         }
 
-        // 5. 紧随在"实付款"、"金额"、"合计"、"付款成功"、"支付成功"标签后面的纯数值 (支持整数 "100")
+        // 5. 紧随在结算标签后面的纯数值 (支持整数 "100")
         val amountPrefixes = listOf("实付款", "金额", "合计", "成功付款", "付款成功", "支付成功", "总计")
         for (i in texts.indices) {
             val t = texts[i].trim()
             for (p in amountPrefixes) {
                 if (t == p || t == "$p:" || t == "$p：") {
                     if (i + 1 < texts.size) {
-                        val cand = texts[i + 1].trim().removePrefix("¥").removePrefix("￥").removePrefix("-").trim()
+                        val next = texts[i + 1].trim()
+                        if (isAmountNoise(next)) continue
+                        val cand = next.removePrefix("¥").removePrefix("￥").removePrefix("-").trim()
                         val v = cand.toDoubleOrNull()
-                        if (v != null && v > 0) return v
+                        if (v != null && v >= 0.0) return v
                     }
                 } else if (t.startsWith(p)) {
                     val cand = t.substringAfter(p).removePrefix(":").removePrefix("：").removePrefix("¥").removePrefix("￥").trim()
+                    if (isAmountNoise(cand)) continue
                     val v = cand.toDoubleOrNull()
-                    if (v != null && v > 0) return v
+                    if (v != null && v >= 0.0) return v
                 }
             }
         }
@@ -1325,6 +1373,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
     }
 
     private fun extractAmountFromSingleText(text: String): Double? {
+        if (isAmountNoise(text)) return null
         val regex = Regex("""[¥￥]\s*-?\s*([0-9]+\.?[0-9]*)""")
         val m = regex.find(text)
         if (m != null) {
@@ -1378,14 +1427,17 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 if (t == label || t == "$label:" || t == "$label：") {
                     if (i + 1 < texts.size) {
                         val candidate = texts[i + 1].trim()
-                        if (candidate.isNotBlank() && !isSystemWord(candidate) &&
-                            !candidate.startsWith("¥") && !candidate.startsWith("￥")) {
+                        if (candidate.isNotBlank() && !isSystemWord(candidate) && !isAmountNoise(candidate) &&
+                            !candidate.startsWith("¥") && !candidate.startsWith("￥") &&
+                            !Regex("""^[0-9]""").containsMatchIn(candidate)) {
                             return candidate
                         }
                     }
                 } else if (t.startsWith(label) && (t.contains(":") || t.contains("："))) {
                     val clean = t.substringAfter(":").substringAfter("：").trim()
-                    if (clean.isNotBlank() && !isSystemWord(clean) && !clean.startsWith("¥") && !clean.startsWith("￥")) {
+                    if (clean.isNotBlank() && !isSystemWord(clean) && !isAmountNoise(clean) &&
+                        !clean.startsWith("¥") && !clean.startsWith("￥") &&
+                        !Regex("""^[0-9]""").containsMatchIn(clean)) {
                         return clean
                     }
                 }
@@ -1400,7 +1452,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 if (t == label || t == "$label:" || t == "$label：") {
                     if (i + 1 < texts.size) {
                         val candidate = texts[i + 1].trim()
-                        if (candidate.isNotBlank() && !isSystemWord(candidate)) {
+                        if (candidate.isNotBlank() && !isSystemWord(candidate) && !isAmountNoise(candidate) &&
+                            !Regex("""^[0-9]""").containsMatchIn(candidate)) {
                             if (candidate.contains("停车")) {
                                 return "停车缴费"
                             }
@@ -1409,7 +1462,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                     }
                 } else if (t.startsWith(label) && (t.contains(":") || t.contains("："))) {
                     val clean = t.substringAfter(":").substringAfter("：").trim()
-                    if (clean.isNotBlank() && !isSystemWord(clean)) {
+                    if (clean.isNotBlank() && !isSystemWord(clean) && !isAmountNoise(clean) &&
+                        !Regex("""^[0-9]""").containsMatchIn(clean)) {
                         if (clean.contains("停车")) {
                             return "停车缴费"
                         }
@@ -1437,10 +1491,11 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                     val prevIdx = i - step
                     if (prevIdx >= 0) {
                         val prev = texts[prevIdx].trim()
-                        if (prev.length in 2..32 && !isSystemWord(prev) &&
+                        if (prev.length in 2..32 && !isSystemWord(prev) && !isAmountNoise(prev) &&
                             !prev.startsWith("¥") && !prev.startsWith("￥") &&
                             !prev.contains("支付") && !prev.contains("付款") && !prev.contains("详情") &&
-                            !prev.contains("/s", ignoreCase = true)) {
+                            !prev.contains("/s", ignoreCase = true) &&
+                            !Regex("""^[0-9]""").containsMatchIn(prev)) {
                             return prev
                         }
                     }
