@@ -882,6 +882,46 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             }
         }
 
+        // 7. 电商应用（淘宝/天猫/淘特/闲鱼/京东/美团/饿了么）订单列表与历史查单翻账流特征拦截！
+        // 坚决杜绝“点进淘宝看全部订单/待发货/待收货，却将历史旧订单误记账”！
+        if (isShopping) {
+            // (1) 订单分类 Tab 栏与订单搜索顶栏特征（即时单笔收银台绝不会有一整排订单分类 Tab 栏）：
+            val statusTabCount = listOf("待付款", "待发货", "待收货", "待评价", "退款/售后", "退款/退货", "待收").count { joined.contains(it) }
+            val hasOrderListNav = joined.contains("全部订单") || joined.contains("我的订单") || joined.contains("搜索订单") || joined.contains("订单列表")
+            if (statusTabCount >= 2 && (hasOrderListNav || joined.contains("全部") || joined.contains("管理") || joined.contains("筛选"))) {
+                return true
+            }
+
+            // (2) 订单卡片列表多单共存铁证（统计页面中“交易成功”、“实付款”、“查看物流”、“追加评价”出现次数）：
+            val countTradeSuccess = Regex("""交易成功""").findAll(joined).count()
+            val countBuyerPaid = Regex("""买家已付款""").findAll(joined).count()
+            val countActualPay = Regex("""实付款""").findAll(joined).count()
+            val countViewLogistics = Regex("""查看物流""").findAll(joined).count()
+            val countEvaluate = Regex("""(追加评价|去评价|评价晒单)""").findAll(joined).count()
+            val countRebuy = Regex("""(再买一单|再次购买|常购清单)""").findAll(joined).count()
+
+            // 若页面展示了 2 个或以上的“实付款”，说明当前屏幕展示了多条订单列表，坚决拦截！
+            if (countActualPay >= 2) {
+                return true
+            }
+
+            // 若页面展示了 2 个或以上的“交易成功”或“买家已付款”，说明处于订单流浏览，坚决拦截！
+            if (countTradeSuccess >= 2 || countBuyerPaid >= 2) {
+                return true
+            }
+
+            // 若出现 2 个或以上的订单列表卡片专属操作按钮（查看物流 / 追加评价 / 再买一单）：
+            if (countViewLogistics >= 2 || countEvaluate >= 2 || countRebuy >= 2) {
+                return true
+            }
+
+            // (3) 单卡片露出但伴随订单搜索管理栏与订单状态
+            if (hasOrderListNav && (countTradeSuccess >= 1 || countActualPay >= 1) &&
+                (joined.contains("待付款") || joined.contains("待发货") || joined.contains("待收货") || joined.contains("退款/售后"))) {
+                return true
+            }
+        }
+
         return false
     }
 
@@ -1089,6 +1129,33 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                     val date = sdf.parse(String.format(java.util.Locale.CHINA, "%04d-%02d-%02d %s", currentYear, month, day, timeStr))
                     if (date != null) return date.time
                 } catch (_: Exception) {}
+            }
+        }
+
+        // 4.1 纯月日简写格式 (如 "06.13", "06-04", "10.15", 常见于电商订单卡片日期)
+        val regexPureMonthDay = Regex("""^([0-1]?[0-9])[.-]([0-3]?[0-9])$""")
+        for (t in texts) {
+            val trimmed = t.trim()
+            val m = regexPureMonthDay.matchEntire(trimmed)
+            if (m != null) {
+                val month = m.groupValues[1].toIntOrNull() ?: 0
+                val day = m.groupValues[2].toIntOrNull() ?: 0
+                if (month in 1..12 && day in 1..31) {
+                    val cal = java.util.Calendar.getInstance()
+                    val nowMonth = cal.get(java.util.Calendar.MONTH) + 1
+                    var targetYear = currentYear
+                    if (month > nowMonth) {
+                        targetYear -= 1
+                    }
+                    cal.set(java.util.Calendar.YEAR, targetYear)
+                    cal.set(java.util.Calendar.MONTH, month - 1)
+                    cal.set(java.util.Calendar.DAY_OF_MONTH, day)
+                    cal.set(java.util.Calendar.HOUR_OF_DAY, 12)
+                    cal.set(java.util.Calendar.MINUTE, 0)
+                    cal.set(java.util.Calendar.SECOND, 0)
+                    cal.set(java.util.Calendar.MILLISECOND, 0)
+                    return cal.timeInMillis
+                }
             }
         }
 

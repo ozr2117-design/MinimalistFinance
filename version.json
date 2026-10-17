@@ -1,8 +1,8 @@
 {
-  "versionCode": 25,
-  "versionName": "1.2.4",
+  "versionCode": 26,
+  "versionName": "1.2.5",
   "releaseDate": "2026-10-17",
-  "changelog": "1. 彻底解决0元实付/全额卡券抵扣误记：实付款为0.00元时严密识别并直接拦截，杜绝跌入备用逻辑误抓卡余额\n2. 深度过滤余额与红包噪声：严格排除京东E卡余额、礼品卡、账户余额、立减金与代金券对金额提取的污染\n3. 优化商户名称提取：杜绝将'0.01元红包'等优惠抵扣词误识别为商户名，提供京东外卖/购物智能兜底\n4. 完善京东支付生态识别：动态识别京东白条、京东E卡、京东支付，修正默认账户误判为微信的问题",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.4/shubu-v1.2.4.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.4/shubu-v1.2.4.apk"
+  "changelog": "1. 彻底根治淘宝/电商订单列表查单误记：建立订单状态分类Tab栏(待付款/待发货/待收货/退款售后)与搜索订单栏铁桶拦截\n2. 多订单列表共存识别：严格检测多笔'交易成功'、'实付款'与'查看物流/追加评价/再买一单'，杜绝滑动列表时批量误记账\n3. 增强历史订单简写日期识别：支持'06.13'、'06-04'纯月日历史单据解析与10分钟超期熔断拦截\n4. 确保单笔即时支付成功页面毫秒级精准记账不受任何影响",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.5/shubu-v1.2.5.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.5/shubu-v1.2.5.apk"
 }
