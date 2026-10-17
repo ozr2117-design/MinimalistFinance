@@ -1,8 +1,8 @@
 {
-  "versionCode": 29,
-  "versionName": "1.2.8",
+  "versionCode": 30,
+  "versionName": "1.2.9",
   "releaseDate": "2026-10-17",
-  "changelog": "1. 新增【一键导出自动记账诊断快照】：在无障碍自动记账页面可一键复制最近10条抓取事件、拦截原因、原始UI节点文本与金额提取明细，杜绝繁琐文字描述与截图沟通，秒级定位根因\n2. 全链路诊断打点全覆盖：精准记录通知栏、窗口变化、主页导航拦截、订单查账拦截、原子预占位并发锁及数据库入库全状态\n3. 模拟测试同步支持诊断快照记录",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.8/shubu-v1.2.8.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.8/shubu-v1.2.8.apk"
+  "changelog": "1. 新增【一键静默上报 GitHub Issue】：在无障碍自动记账页面可直接一键将诊断快照上传至 GitHub 仓库创建 Issue，免去复制粘贴切换应用的繁琐操作\n2. 引入 Cloudflare Worker 安全转发通道：手机端零鉴权配置、零隐私暴露，安全高速直连\n3. 保留双通道操作：同时支持【复制快照】与【一键上报 GitHub】灵活使用",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.9/shubu-v1.2.9.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.9/shubu-v1.2.9.apk"
 }

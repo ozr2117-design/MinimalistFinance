@@ -64,4 +64,58 @@ object AutoRecordDiagnosticLogger {
         sb.append("\n========================================\n")
         return sb.toString()
     }
+
+    /**
+     * 一键将诊断快照静默上报至 GitHub Issue (通过 Cloudflare Worker 安全转发)
+     */
+    fun uploadLogs(onResult: (success: Boolean, message: String) -> Unit) {
+        val logs = getFormattedLogs()
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA)
+        val title = "【自动记账诊断】${sdf.format(Date())}"
+
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                val url = java.net.URL("https://shubu-report.ozr2117.workers.dev")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 10_000
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+
+                val jsonPayload = org.json.JSONObject().apply {
+                    put("title", title)
+                    put("content", logs)
+                }.toString()
+
+                conn.outputStream.use { os ->
+                    os.write(jsonPayload.toByteArray(Charsets.UTF_8))
+                }
+
+                val code = conn.responseCode
+                val responseText = if (code in 200..299) {
+                    conn.inputStream.bufferedReader().use { it.readText() }
+                } else {
+                    conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $code"
+                }
+
+                val resObj = org.json.JSONObject(responseText)
+                if (resObj.optBoolean("success", false)) {
+                    val issueNum = resObj.optInt("issue_number", 0)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(true, "已成功上报至 GitHub Issue #${if (issueNum > 0) issueNum else ""}")
+                    }
+                } else {
+                    val err = resObj.optString("error", "上报失败")
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(false, "上报失败: $err")
+                    }
+                }
+            } catch (e: Exception) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(false, "网络异常: ${e.localizedMessage ?: "请检查网络"}")
+                }
+            }
+        }
+    }
 }

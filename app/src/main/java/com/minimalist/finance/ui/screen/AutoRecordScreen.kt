@@ -58,6 +58,7 @@ fun AutoRecordScreen(
 
     var autoRecordEnabled by remember { mutableStateOf(AutoRecordAccessibilityService.isEnabled(context)) }
     var keepAliveEnabled by remember { mutableStateOf(AutoRecordAccessibilityService.isKeepAliveEnabled(context)) }
+    var isUploadingReport by remember { mutableStateOf(false) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -302,30 +303,75 @@ fun AutoRecordScreen(
                             lineHeight = 17.sp
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        // 一键复制排查快照按钮
-                        FilledTonalButton(
-                            onClick = {
-                                val logs = AutoRecordDiagnosticLogger.getFormattedLogs()
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("数簿自动记账诊断日志", logs)
-                                clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "📋 最近抓取诊断快照已复制到剪贴板，可直接粘贴发送排查！", Toast.LENGTH_LONG).show()
-                            },
+                        // 双操作按钮：一键复制快照 + 一键上报 GitHub Issue
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = if (isDark) Color(0xFF2C3240) else Color(0xFFEFF4FF),
-                                contentColor = BlueAccent
-                            ),
-                            contentPadding = PaddingValues(vertical = 10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "一键导出最近抓取诊断快照 (排查漏记/重记)",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            // 按钮 1: 一键复制
+                            FilledTonalButton(
+                                onClick = {
+                                    val logs = AutoRecordDiagnosticLogger.getFormattedLogs()
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clip = ClipData.newPlainText("数簿自动记账诊断日志", logs)
+                                    clipboard.setPrimaryClip(clip)
+                                    Toast.makeText(context, "📋 诊断快照已复制到剪贴板！", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = if (isDark) Color(0xFF2C3240) else Color(0xFFEFF4FF),
+                                    contentColor = BlueAccent
+                                ),
+                                contentPadding = PaddingValues(vertical = 10.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "复制快照",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            // 按钮 2: 一键上报到 GitHub Issue
+                            Button(
+                                onClick = {
+                                    if (isUploadingReport) return@Button
+                                    isUploadingReport = true
+                                    Toast.makeText(context, "正在通过 Cloudflare 静默上报中...", Toast.LENGTH_SHORT).show()
+                                    AutoRecordDiagnosticLogger.uploadLogs { success, msg ->
+                                        isUploadingReport = false
+                                        Toast.makeText(context, if (success) "🚀 $msg" else "❌ $msg", Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                enabled = !isUploadingReport,
+                                modifier = Modifier.weight(1.35f),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = BlueAccent,
+                                    contentColor = Color.White
+                                ),
+                                contentPadding = PaddingValues(vertical = 10.dp)
+                            ) {
+                                if (isUploadingReport) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(text = "上报中...", fontSize = 12.sp)
+                                } else {
+                                    Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "一键上报 GitHub",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
                     }
                 }
