@@ -191,7 +191,11 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 lower.contains("etcp") || lower.contains("车牌") || lower.contains("车费") ||
                 lower.contains("道闸") || lower.contains("铁路") || lower.contains("12306") ||
                 lower.contains("机票") || lower.contains("出行") || lower.contains("单车") ||
-                lower.contains("高速") || lower.contains("中国石油") || lower.contains("中国石化") -> "行"
+                lower.contains("高速") || lower.contains("中国石油") || lower.contains("中国石化") ||
+                lower.contains("联合电子") || lower.contains("联合电服") || lower.contains("粤通卡") ||
+                lower.contains("etc") || lower.contains("交控") || lower.contains("路桥") ||
+                lower.contains("通行费") || lower.contains("过路费") || lower.contains("收费站") ||
+                lower.contains("交通") -> "行"
 
                 lower.contains("衣") || lower.contains("服装") || lower.contains("优衣库") ||
                 lower.contains("鞋") || lower.contains("专柜") || lower.contains("淘宝服饰") ||
@@ -638,8 +642,19 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return
         }
 
-        // 3. 短时间内存防抖 (60秒内同应用同金额同类型坚决不重复触发)
-        if (AutoRecordDedupeManager.isDebounced(pkg, type, amount, 60_000L)) {
+        // 3. 【核心同步原子预占位 (Atomic Pre-Claim)】：
+        // 彻底根除微信“通知栏推送 + 页面收银台”毫秒级极速并发导致的协程 TOCTOU 竞态漏洞！
+        // 在主线程同步块内原子性完成 60 秒内存防抖与指纹锁死，并发事件瞬间被阻断，杜绝产生多个协程！
+        val claimed = AutoRecordDedupeManager.tryClaim(
+            context = applicationContext,
+            pkg = pkg,
+            type = type,
+            amount = amount,
+            fingerprint = fingerprint,
+            orderId = orderId,
+            windowMs = 60_000L
+        )
+        if (!claimed) {
             return
         }
 
@@ -651,6 +666,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         )
         val maxBillAge = if (isShopping) 600_000L else 180_000L
         if (billTimestamp != null && now - billTimestamp > maxBillAge) {
+            AutoRecordDedupeManager.releaseClaim(pkg, type, amount, fingerprint, orderId)
             return
         }
 
@@ -679,76 +695,80 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         val catName = classifyCategory("$displayName $rawContext", type)
 
         scope.launch {
-            val db = AppDatabase.getDatabase(applicationContext, scope)
+            try {
+                val db = AppDatabase.getDatabase(applicationContext, scope)
 
-            // 5. 数据库订单号终身排重：若数据库中已经存过这个微信/支付宝交易单号，绝对不再记！
-            if (!orderId.isNullOrBlank()) {
-                val existingCount = db.recordDao().getRecordCountByOrderId(orderId)
-                if (existingCount > 0) {
+                // 5. 数据库订单号终身排重：若数据库中已经存过这个微信/支付宝交易单号，绝对不再记！
+                if (!orderId.isNullOrBlank()) {
+                    val existingCount = db.recordDao().getRecordCountByOrderId(orderId)
+                    if (existingCount > 0) {
+                        AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
+                        return@launch
+                    }
+                }
+
+                // 6. 数据库当天同商户同金额排重拦截：
+                // 如果商户名称明确（如“肯德基”），且今天已经记过一笔完全一样的商户+金额，绝对不再记！
+                if (partyName.isNotBlank() && !isSystemWord(partyName)) {
+                    val todayStart = AutoRecordDedupeManager.getTodayStartMillis()
+                    val existingMerchantCount = db.recordDao().getSameMerchantRecordCount(
+                        amount = amount,
+                        type = type,
+                        merchant = partyName,
+                        sinceTimestamp = todayStart
+                    )
+                    if (existingMerchantCount > 0) {
+                        AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
+                        return@launch
+                    }
+                }
+
+                // 7. 数据库底层熔断防重：检查数据库内近 10 分钟 (600秒) 是否存在相同金额相同类型的记账
+                val recentDupCount = db.recordDao().getRecentDuplicateCount(amount, type, now - 600_000L)
+                if (recentDupCount > 0) {
                     AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
                     return@launch
                 }
-            }
 
-            // 6. 数据库当天同商户同金额排重拦截：
-            // 如果商户名称明确（如“肯德基”），且今天已经记过一笔完全一样的商户+金额，绝对不再记！
-            if (partyName.isNotBlank() && !isSystemWord(partyName)) {
-                val todayStart = AutoRecordDedupeManager.getTodayStartMillis()
-                val existingMerchantCount = db.recordDao().getSameMerchantRecordCount(
-                    amount = amount,
+                val remarkText = if (!orderId.isNullOrBlank()) {
+                    "$displayName [单号:$orderId]"
+                } else {
+                    displayName
+                }
+
+                val finalTimestamp = billTimestamp ?: now
+
+                val record = Record(
+                    bookId = 1L, // 统一记入日常主账本
                     type = type,
-                    merchant = partyName,
-                    sinceTimestamp = todayStart
+                    amount = amount,
+                    categoryName = catName,
+                    accountName = accountName,
+                    remark = remarkText,
+                    tag = "自动记账",
+                    timestamp = finalTimestamp
                 )
-                if (existingMerchantCount > 0) {
-                    AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
-                    return@launch
-                }
-            }
+                db.recordDao().insertRecord(record)
 
-            // 7. 数据库底层熔断防重：检查数据库内近 10 分钟 (600秒) 是否存在相同金额相同类型的记账
-            val recentDupCount = db.recordDao().getRecentDuplicateCount(amount, type, now - 600_000L)
-            if (recentDupCount > 0) {
+                // 写入持久化防重存储（完成入库确权）
                 AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
-                return@launch
-            }
 
-            val remarkText = if (!orderId.isNullOrBlank()) {
-                "$displayName [单号:$orderId]"
-            } else {
-                displayName
-            }
+                com.minimalist.finance.util.MilestoneEncouragementManager.checkAndCelebrate(applicationContext, scope)
 
-            val finalTimestamp = billTimestamp ?: now
+                lastRecordLog = "${if (type == TransactionType.INCOME) "收入 +" else "支出 -"}¥${String.format(java.util.Locale.CHINA, "%.2f", amount)} ($catName · $accountName · $displayName)"
+                lastRecordTime = now
 
-            val record = Record(
-                bookId = 1L, // 统一记入日常主账本
-                type = type,
-                amount = amount,
-                categoryName = catName,
-                accountName = accountName,
-                remark = remarkText,
-                tag = "自动记账",
-                timestamp = finalTimestamp
-            )
-            db.recordDao().insertRecord(record)
-
-            // 写入持久化防重存储与防抖缓存（入库成功后方显式占位，确保幂等）
-            AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
-            AutoRecordDedupeManager.markDebounced(pkg, type, amount)
-
-            com.minimalist.finance.util.MilestoneEncouragementManager.checkAndCelebrate(applicationContext, scope)
-
-            lastRecordLog = "${if (type == TransactionType.INCOME) "收入 +" else "支出 -"}¥${String.format(java.util.Locale.CHINA, "%.2f", amount)} ($catName · $accountName · $displayName)"
-            lastRecordTime = now
-
-            mainHandler.post {
-                val prefix = if (type == TransactionType.INCOME) "收入 +" else "支出 -"
-                Toast.makeText(
-                    applicationContext,
-                    "⚡ 数簿: 自动记录$prefix¥${String.format(java.util.Locale.CHINA, "%.2f", amount)} ($catName · $accountName · $displayName)",
-                    Toast.LENGTH_LONG
-                ).show()
+                mainHandler.post {
+                    val prefix = if (type == TransactionType.INCOME) "收入 +" else "支出 -"
+                    Toast.makeText(
+                        applicationContext,
+                        "⚡ 数簿: 自动记录$prefix¥${String.format(java.util.Locale.CHINA, "%.2f", amount)} ($catName · $accountName · $displayName)",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            } catch (e: Exception) {
+                // 发生未捕获异常时释放占位，允许用户重试
+                AutoRecordDedupeManager.releaseClaim(pkg, type, amount, fingerprint, orderId)
             }
         }
     }

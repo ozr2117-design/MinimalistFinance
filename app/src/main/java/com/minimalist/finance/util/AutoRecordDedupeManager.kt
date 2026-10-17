@@ -70,8 +70,75 @@ object AutoRecordDedupeManager {
     }
 
     /**
+     * 同步原子预占位（Check-and-Claim）：
+     * 在同一个同步锁内完成“检查 + 立即占位”，彻底消除通知栏与前台窗口毫秒级并发导致的协程异步竞态！
+     * @return true 表示成功获得记账处理权；false 表示已有相同记录在处理中或 60 秒内已记过
+     */
+    @Synchronized
+    fun tryClaim(
+        context: Context,
+        pkg: String,
+        type: TransactionType,
+        amount: Double,
+        fingerprint: String?,
+        orderId: String?,
+        windowMs: Long = 60_000L
+    ): Boolean {
+        init(context)
+        val now = System.currentTimeMillis()
+        val debounceKey = "$pkg-${type.name}-${String.format(Locale.US, "%.2f", amount)}"
+
+        // 1. 检查订单号是否已记录/已占位
+        if (!orderId.isNullOrBlank() && memoryOrderCache.containsKey(orderId)) {
+            return false
+        }
+
+        // 2. 检查交易特征指纹是否已记录/已占位
+        if (!fingerprint.isNullOrBlank() && memoryFingerprintCache.containsKey(fingerprint)) {
+            return false
+        }
+
+        // 3. 检查短时间内存防抖 (如 60 秒内同应用同金额同类型)
+        val lastDebounceTime = debounceCache[debounceKey] ?: 0L
+        if (now - lastDebounceTime < windowMs) {
+            return false
+        }
+
+        // 4. 原子性即刻预占位！（在同一同步块中立刻锁定，后续并发调用瞬间被拦截）
+        debounceCache[debounceKey] = now
+        if (!fingerprint.isNullOrBlank()) {
+            memoryFingerprintCache[fingerprint] = now
+        }
+        if (!orderId.isNullOrBlank()) {
+            memoryOrderCache[orderId] = now
+        }
+
+        return true
+    }
+
+    /**
+     * 释放预占位（在入库被数据库排重拦截、还款拦截或异常终止时调用，避免死锁）
+     */
+    @Synchronized
+    fun releaseClaim(
+        pkg: String,
+        type: TransactionType,
+        amount: Double,
+        fingerprint: String?,
+        orderId: String?
+    ) {
+        val debounceKey = "$pkg-${type.name}-${String.format(Locale.US, "%.2f", amount)}"
+        debounceCache.remove(debounceKey)
+        if (!fingerprint.isNullOrBlank()) {
+            memoryFingerprintCache.remove(fingerprint)
+        }
+        if (!orderId.isNullOrBlank()) {
+            memoryOrderCache.remove(orderId)
+        }
+    }
+
+    /**
      * 短时间内存防抖只读检查 (如 60 秒内同应用同金额同类型是否已被记录)
-     * 绝不提前占用时间戳，彻底避免因页面前置校验未通过而导致的 60 秒死锁误杀！
      */
     fun isDebounced(pkg: String, type: TransactionType, amount: Double, windowMs: Long = 60_000L): Boolean {
         val now = System.currentTimeMillis()

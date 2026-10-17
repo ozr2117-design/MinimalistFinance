@@ -1,8 +1,8 @@
 {
-  "versionCode": 27,
-  "versionName": "1.2.6",
+  "versionCode": 28,
+  "versionName": "1.2.7",
   "releaseDate": "2026-10-17",
-  "changelog": "1. 经过 DSPro 深度架构审查，封堵电商历史查单全部盲区\n2. 新增历史订单详情页铁证拦截：翻看具体订单详情、申请售后、联系商家时100%绝对拦截\n3. 封死列表底部单卡片残留：只要出现查看物流/追加评价/再买一单等历史操作按钮即刻拦截\n4. 电商即时支付成功页面毫秒级精准记账不受任何影响",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.6/shubu-v1.2.6.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.6/shubu-v1.2.6.apk"
+  "changelog": "1. 彻底根除微信支付重复记账：引入同步原子级预占位机制(Atomic Pre-Claim)，彻底消除通知栏与前台窗口毫秒级并发导致的协程TOCTOU竞态\n2. 优化异常占位释放与回滚：确保在遭遇数据库排重或异常终止时优雅释放占位，保持绝对幂等\n3. 强化交通通行费智能分类：新增高速公路、ETC、粤通卡、联合电子、交控、路桥、通行费等商户精准归纳为'行'分类",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.7/shubu-v1.2.7.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.7/shubu-v1.2.7.apk"
 }
