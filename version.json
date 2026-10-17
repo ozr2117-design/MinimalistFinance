@@ -1,8 +1,8 @@
 {
-  "versionCode": 28,
-  "versionName": "1.2.7",
+  "versionCode": 29,
+  "versionName": "1.2.8",
   "releaseDate": "2026-10-17",
-  "changelog": "1. 彻底根除微信支付重复记账：引入同步原子级预占位机制(Atomic Pre-Claim)，彻底消除通知栏与前台窗口毫秒级并发导致的协程TOCTOU竞态\n2. 优化异常占位释放与回滚：确保在遭遇数据库排重或异常终止时优雅释放占位，保持绝对幂等\n3. 强化交通通行费智能分类：新增高速公路、ETC、粤通卡、联合电子、交控、路桥、通行费等商户精准归纳为'行'分类",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.7/shubu-v1.2.7.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.7/shubu-v1.2.7.apk"
+  "changelog": "1. 新增【一键导出自动记账诊断快照】：在无障碍自动记账页面可一键复制最近10条抓取事件、拦截原因、原始UI节点文本与金额提取明细，杜绝繁琐文字描述与截图沟通，秒级定位根因\n2. 全链路诊断打点全覆盖：精准记录通知栏、窗口变化、主页导航拦截、订单查账拦截、原子预占位并发锁及数据库入库全状态\n3. 模拟测试同步支持诊断快照记录",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.8/shubu-v1.2.8.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.8/shubu-v1.2.8.apk"
 }

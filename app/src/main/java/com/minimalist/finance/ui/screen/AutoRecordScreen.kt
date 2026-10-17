@@ -31,7 +31,10 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import android.content.ClipData
+import android.content.ClipboardManager
 import com.minimalist.finance.service.AutoRecordAccessibilityService
+import com.minimalist.finance.util.AutoRecordDiagnosticLogger
 import com.minimalist.finance.ui.theme.*
 import com.minimalist.finance.ui.viewmodel.MainViewModel
 
@@ -253,9 +256,10 @@ fun AutoRecordScreen(
                 }
             }
 
-            // 📋 4. 最近一次自动取数动态
+            // 📋 4. 最近自动记账动态与一键排查诊断快照
             item {
                 val lastLog = AutoRecordAccessibilityService.lastRecordLog
+                val snapshotCount = AutoRecordDiagnosticLogger.getSnapshots().size
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -264,10 +268,30 @@ fun AutoRecordScreen(
                         .padding(16.dp)
                 ) {
                     Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.History, contentDescription = null, tint = BlueAccent, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(text = "最近一次自动取数动态", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.History, contentDescription = null, tint = BlueAccent, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(text = "最近自动记账动态", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
+                            }
+                            if (snapshotCount > 0) {
+                                Surface(
+                                    color = BlueAccent.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = "快照缓存: $snapshotCount 条",
+                                        fontSize = 11.sp,
+                                        color = BlueAccent,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
@@ -277,6 +301,32 @@ fun AutoRecordScreen(
                             fontWeight = if (lastLog.isNotBlank()) FontWeight.Medium else FontWeight.Normal,
                             lineHeight = 17.sp
                         )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        // 一键复制排查快照按钮
+                        FilledTonalButton(
+                            onClick = {
+                                val logs = AutoRecordDiagnosticLogger.getFormattedLogs()
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("数簿自动记账诊断日志", logs)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "📋 最近抓取诊断快照已复制到剪贴板，可直接粘贴发送排查！", Toast.LENGTH_LONG).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = if (isDark) Color(0xFF2C3240) else Color(0xFFEFF4FF),
+                                contentColor = BlueAccent
+                            ),
+                            contentPadding = PaddingValues(vertical = 10.dp)
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "一键导出最近抓取诊断快照 (排查漏记/重记)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }
