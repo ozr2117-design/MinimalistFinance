@@ -883,39 +883,61 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         }
 
         // 7. 电商应用（淘宝/天猫/淘特/闲鱼/京东/美团/饿了么）订单列表与历史查单翻账流特征拦截！
-        // 坚决杜绝“点进淘宝看全部订单/待发货/待收货，却将历史旧订单误记账”！
+        // 坚决杜绝“点进淘宝看全部订单/待发货/待收货/订单详情，却将历史旧订单误记账”！
         if (isShopping) {
-            // (1) 订单分类 Tab 栏与订单搜索顶栏特征（即时单笔收银台绝不会有一整排订单分类 Tab 栏）：
-            val statusTabCount = listOf("待付款", "待发货", "待收货", "待评价", "退款/售后", "退款/退货", "待收").count { joined.contains(it) }
-            val hasOrderListNav = joined.contains("全部订单") || joined.contains("我的订单") || joined.contains("搜索订单") || joined.contains("订单列表")
+            // (1) 【订单详情页铁证拦截】：用户从列表点进某笔历史订单查看详情、物流轨迹或联系商家
+            // 即时支付完成收银台绝对不会包含“订单详情”、“订单编号”、“申请售后”、“联系卖家”
+            val hasOrderDetailMarkers = listOf(
+                "订单详情", "订单编号", "订单号", "申请售后", "联系卖家",
+                "订单信息", "下单时间", "成交时间"
+            ).any { joined.contains(it) }
+            if (hasOrderDetailMarkers) {
+                return true
+            }
+
+            // (2) 订单分类 Tab 栏与订单搜索顶栏特征（即时单笔收银台绝不会有一整排订单分类 Tab 栏）：
+            val statusTabCount = listOf(
+                "待付款", "待发货", "待收货", "待评价", 
+                "退款/售后", "退款/退货", "待收", "已完成", "已取消"
+            ).count { joined.contains(it) }
+            val hasOrderListNav = listOf(
+                "全部订单", "我的订单", "搜索订单", "订单列表", "全部", "管理", "筛选", "订单回收站"
+            ).any { joined.contains(it) }
             if (statusTabCount >= 2 && (hasOrderListNav || joined.contains("全部") || joined.contains("管理") || joined.contains("筛选"))) {
                 return true
             }
 
-            // (2) 订单卡片列表多单共存铁证（统计页面中“交易成功”、“实付款”、“查看物流”、“追加评价”出现次数）：
+            // (3) 订单卡片列表多单共存铁证（统计页面中“交易成功”、“实付款”、“查看物流”、“追加评价”出现次数）：
             val countTradeSuccess = Regex("""交易成功""").findAll(joined).count()
             val countBuyerPaid = Regex("""买家已付款""").findAll(joined).count()
             val countActualPay = Regex("""实付款""").findAll(joined).count()
             val countViewLogistics = Regex("""查看物流""").findAll(joined).count()
             val countEvaluate = Regex("""(追加评价|去评价|评价晒单)""").findAll(joined).count()
             val countRebuy = Regex("""(再买一单|再次购买|常购清单)""").findAll(joined).count()
+            val countOrderNo = Regex("""(订单号|订单编号)\s*[:：]?\s*\d{8,}""").findAll(joined).count()
 
-            // 若页面展示了 2 个或以上的“实付款”，说明当前屏幕展示了多条订单列表，坚决拦截！
-            if (countActualPay >= 2) {
+            // 多卡片共存 → 铁证直接拦截
+            if (countActualPay >= 2) return true
+            if (countTradeSuccess >= 2 || countBuyerPaid >= 2) return true
+            if (countViewLogistics >= 2 || countEvaluate >= 2 || countRebuy >= 2) return true
+            if (countOrderNo >= 2) return true
+
+            // (4) 【列表底部单卡片残留封堵】：
+            // 即使用户滑到底部导致 Tab 栏滚出屏幕、只露出最后 1 张卡片，
+            // 只要出现“查看物流”或“追加评价”或“再买一单”等历史订单专属操作按钮，100% 拦截！
+            val hasHistoryOnlyActions = countViewLogistics >= 1 || countEvaluate >= 1 || countRebuy >= 1
+            if (hasHistoryOnlyActions && (countTradeSuccess >= 1 || countActualPay >= 1)) {
                 return true
             }
 
-            // 若页面展示了 2 个或以上的“交易成功”或“买家已付款”，说明处于订单流浏览，坚决拦截！
-            if (countTradeSuccess >= 2 || countBuyerPaid >= 2) {
+            // (5) 单卡片无明确即时支付标志拦截：
+            // 即时支付完成页必定带有“支付成功”或“付款成功”，而历史订单列表卡片仅有“交易成功”或“买家已付款”
+            val hasPaySuccessMarker = joined.contains("支付成功") || joined.contains("付款成功") || joined.contains("支付结果")
+            if (!hasPaySuccessMarker && (countTradeSuccess >= 1 || countBuyerPaid >= 1) && countActualPay >= 1) {
                 return true
             }
 
-            // 若出现 2 个或以上的订单列表卡片专属操作按钮（查看物流 / 追加评价 / 再买一单）：
-            if (countViewLogistics >= 2 || countEvaluate >= 2 || countRebuy >= 2) {
-                return true
-            }
-
-            // (3) 单卡片露出但伴随订单搜索管理栏与订单状态
+            // (6) 伴随订单搜索管理栏与订单状态
             if (hasOrderListNav && (countTradeSuccess >= 1 || countActualPay >= 1) &&
                 (joined.contains("待付款") || joined.contains("待发货") || joined.contains("待收货") || joined.contains("退款/售后"))) {
                 return true

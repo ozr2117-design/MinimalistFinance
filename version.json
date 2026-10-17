@@ -1,8 +1,8 @@
 {
-  "versionCode": 26,
-  "versionName": "1.2.5",
+  "versionCode": 27,
+  "versionName": "1.2.6",
   "releaseDate": "2026-10-17",
-  "changelog": "1. 彻底根治淘宝/电商订单列表查单误记：建立订单状态分类Tab栏(待付款/待发货/待收货/退款售后)与搜索订单栏铁桶拦截\n2. 多订单列表共存识别：严格检测多笔'交易成功'、'实付款'与'查看物流/追加评价/再买一单'，杜绝滑动列表时批量误记账\n3. 增强历史订单简写日期识别：支持'06.13'、'06-04'纯月日历史单据解析与10分钟超期熔断拦截\n4. 确保单笔即时支付成功页面毫秒级精准记账不受任何影响",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.5/shubu-v1.2.5.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.5/shubu-v1.2.5.apk"
+  "changelog": "1. 经过 DSPro 深度架构审查，封堵电商历史查单全部盲区\n2. 新增历史订单详情页铁证拦截：翻看具体订单详情、申请售后、联系商家时100%绝对拦截\n3. 封死列表底部单卡片残留：只要出现查看物流/追加评价/再买一单等历史操作按钮即刻拦截\n4. 电商即时支付成功页面毫秒级精准记账不受任何影响",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.6/shubu-v1.2.6.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.6/shubu-v1.2.6.apk"
 }
