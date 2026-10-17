@@ -1,5 +1,13 @@
 package com.minimalist.finance.util
 
+import android.os.Handler
+import android.os.Looper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,18 +80,19 @@ object AutoRecordDiagnosticLogger {
         val logs = getFormattedLogs()
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA)
         val title = "【自动记账诊断】${sdf.format(Date())}"
+        val mainHandler = Handler(Looper.getMainLooper())
 
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = java.net.URL("https://shubu-report.ozr2117.workers.dev")
-                val conn = url.openConnection() as java.net.HttpURLConnection
+                val url = URL("https://shubu-report.ozr2117.workers.dev")
+                val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.connectTimeout = 10_000
                 conn.readTimeout = 10_000
                 conn.doOutput = true
                 conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
 
-                val jsonPayload = org.json.JSONObject().apply {
+                val jsonPayload = JSONObject().apply {
                     put("title", title)
                     put("content", logs)
                 }.toString()
@@ -99,20 +108,20 @@ object AutoRecordDiagnosticLogger {
                     conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $code"
                 }
 
-                val resObj = org.json.JSONObject(responseText)
+                val resObj = JSONObject(responseText)
                 if (resObj.optBoolean("success", false)) {
                     val issueNum = resObj.optInt("issue_number", 0)
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    mainHandler.post {
                         onResult(true, "已成功上报至 GitHub Issue #${if (issueNum > 0) issueNum else ""}")
                     }
                 } else {
                     val err = resObj.optString("error", "上报失败")
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    mainHandler.post {
                         onResult(false, "上报失败: $err")
                     }
                 }
             } catch (e: Exception) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                mainHandler.post {
                     onResult(false, "网络异常: ${e.localizedMessage ?: "请检查网络"}")
                 }
             }
