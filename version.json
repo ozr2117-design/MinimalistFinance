@@ -1,8 +1,8 @@
 {
-  "versionCode": 30,
-  "versionName": "1.2.9",
-  "releaseDate": "2026-10-17",
-  "changelog": "1. 新增【一键静默上报 GitHub Issue】：在无障碍自动记账页面可直接一键将诊断快照上传至 GitHub 仓库创建 Issue，免去复制粘贴切换应用的繁琐操作\n2. 引入 Cloudflare Worker 安全转发通道：手机端零鉴权配置、零隐私暴露，安全高速直连\n3. 保留双通道操作：同时支持【复制快照】与【一键上报 GitHub】灵活使用",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.9/shubu-v1.2.9.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.2.9/shubu-v1.2.9.apk"
+  "versionCode": 31,
+  "versionName": "1.3.0",
+  "releaseDate": "2026-10-18",
+  "changelog": "1. 彻底解决淘宝闪购与即时零售支付后漏记：优化订单详情过滤逻辑，放行刚完成支付的单笔即时配送追踪页，不再误判为历史查账\n2. 扩充即时零售状态词：新增'等待商家接单'、'商家已接单'、'正在备货'、'配送中'及'闪购'精准识别，商户标为'淘宝闪购'并智能归入'食'分类\n3. 电商双阶梯渲染补偿：从免密支付跳转回淘宝时增加400ms与1000ms双阶梯延时重试，彻底防止内嵌H5慢渲染漏记\n4. 诊断日志缓冲区智能防抖合并：扩容至25条，连续滑屏拦截自动合并计数，彻底防止有效现场被刷屏冲掉",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.0/shubu-v1.3.0.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.0/shubu-v1.3.0.apk"
 }

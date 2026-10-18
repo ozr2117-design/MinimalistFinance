@@ -20,21 +20,37 @@ import java.util.concurrent.ConcurrentLinkedDeque
  * 记录原始文本树、判定原因与提取结果，供开发者极速排查与单测回归。
  */
 data class CaptureSnapshot(
-    val timestamp: Long = System.currentTimeMillis(),
+    var timestamp: Long = System.currentTimeMillis(),
     val pkg: String,
     val channel: String, // "通知栏 (Notification)" 或 "界面窗口 (Window)"
     val status: String,  // 例如："✅ 成功入库: -¥11.40" 或 "⛔ 拦截: 命中订单列表Tab栏"
     val extractedAmount: Double? = null,
     val extractedMerchant: String? = null,
     val extractedAccount: String? = null,
-    val rawTexts: List<String> = emptyList()
+    val rawTexts: List<String> = emptyList(),
+    var repeatCount: Int = 1
 )
 
 object AutoRecordDiagnosticLogger {
-    private const val MAX_ENTRIES = 10
+    private const val MAX_ENTRIES = 25
     private val buffer = ConcurrentLinkedDeque<CaptureSnapshot>()
 
+    @Synchronized
     fun log(snapshot: CaptureSnapshot) {
+        val first = buffer.peekFirst()
+        // 相邻拦截事件去重：若是同包名同拦截原因、在 5 秒内连续派发的滑屏事件，合并计数，绝不挤爆缓冲区！
+        if (first != null && !snapshot.status.startsWith("✅") &&
+            first.pkg == snapshot.pkg &&
+            first.status == snapshot.status &&
+            first.channel == snapshot.channel &&
+            first.rawTexts.take(3) == snapshot.rawTexts.take(3) &&
+            snapshot.timestamp - first.timestamp < 5000L
+        ) {
+            first.repeatCount += 1
+            first.timestamp = snapshot.timestamp
+            return
+        }
+
         buffer.addFirst(snapshot)
         while (buffer.size > MAX_ENTRIES) {
             buffer.removeLast()
@@ -54,7 +70,7 @@ object AutoRecordDiagnosticLogger {
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.CHINA)
         buffer.forEachIndexed { index, s ->
             sb.append("\n----------------------------------------\n")
-            sb.append("【#${index + 1}】时间: ${sdf.format(Date(s.timestamp))}\n")
+            sb.append("【#${index + 1}】时间: ${sdf.format(Date(s.timestamp))}${if (s.repeatCount > 1) " (连续触发 ${s.repeatCount} 次已合并)" else ""}\n")
             sb.append("通道: ${s.channel} | 应用: ${s.pkg}\n")
             sb.append("判定: ${s.status}\n")
             if (s.extractedAmount != null) {

@@ -195,7 +195,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 lower.contains("生鲜") || lower.contains("果蔬") || lower.contains("小吃") ||
                 lower.contains("喜茶") || lower.contains("星巴克") || lower.contains("食品") ||
                 lower.contains("汉堡") || lower.contains("便利蜂") || lower.contains("全家") ||
-                lower.contains("罗森") || lower.contains("菜市场") || lower.contains("饮") -> "食"
+                lower.contains("罗森") || lower.contains("菜市场") || lower.contains("饮") ||
+                lower.contains("闪购") || lower.contains("淘菜菜") || lower.contains("买菜") -> "食"
 
                 lower.contains("打车") || lower.contains("滴滴") || lower.contains("高德") ||
                 lower.contains("地铁") || lower.contains("公交") || lower.contains("加油") ||
@@ -273,15 +274,18 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                 handleWindow(pkg, event)
-                // 若为状态初次切换，微延时 300ms/500ms 兜底重试一次（解决微信内嵌 Web 渲染延迟与电商/支付宝多层跳转回跳时机）
+                // 若为状态初次切换，微延时兜底重试（解决微信/电商内嵌 Web 渲染延迟与免密跳转回跳时机）
                 if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-                    val delay = if (pkg in listOf("com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless", "com.taobao.idlefish")) 500L else 300L
-                    mainHandler.postDelayed({
-                        val currentPkg = rootInActiveWindow?.packageName?.toString() ?: pkg
-                        if (isPaymentApp(currentPkg)) {
-                            handleWindow(currentPkg, null)
-                        }
-                    }, delay)
+                    val isShopping = pkg in listOf("com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless", "com.taobao.idlefish", "com.sankuai.meituan", "me.ele")
+                    val delays = if (isShopping) listOf(400L, 1000L) else listOf(300L)
+                    delays.forEach { d ->
+                        mainHandler.postDelayed({
+                            val currentPkg = rootInActiveWindow?.packageName?.toString() ?: pkg
+                            if (isPaymentApp(currentPkg)) {
+                                handleWindow(currentPkg, null)
+                            }
+                        }, d)
+                    }
                 }
             }
         }
@@ -607,12 +611,19 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             joined.contains("买家已付款") ||
             joined.contains("等待卖家发货") ||
             joined.contains("等待商家发货") ||
+            joined.contains("等待商家接单") ||
+            joined.contains("商家已接单") ||
+            joined.contains("等待接单") ||
+            joined.contains("正在备货") ||
+            joined.contains("安排配送") ||
+            joined.contains("配送中") ||
             joined.contains("已成功付款") ||
             joined.contains("免密支付成功") ||
             joined.contains("自动扣款成功") ||
             joined.contains("扫码付款成功") ||
             joined.contains("成功付款") ||
             joined.contains("向商家付款成功") ||
+            (joined.contains("闪购") && (joined.contains("实付款") || joined.contains("实付") || joined.contains("成功") || joined.contains("待发货"))) ||
             (joined.contains("支付停车费") && (joined.contains("支付成功") || joined.contains("道闸已抬起"))) ||
             (joined.contains("停车缴费") && (joined.contains("成功") || joined.contains("完成"))) ||
             (joined.contains("下单成功") && !joined.contains("待支付")) ||
@@ -646,9 +657,11 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         val hasExplicitSuccess = joined.contains("支付成功") || joined.contains("付款成功") ||
                 joined.contains("交易成功") || joined.contains("买家已付款") ||
                 joined.contains("等待卖家发货") || joined.contains("等待商家发货") ||
+                joined.contains("等待商家接单") || joined.contains("商家已接单") ||
                 joined.contains("订单已完成") || joined.contains("订单已支付") ||
                 joined.contains("免密支付成功") || joined.contains("自动扣款成功") ||
-                joined.contains("已成功付款") || joined.contains("购买成功")
+                joined.contains("已成功付款") || joined.contains("购买成功") ||
+                (joined.contains("闪购") && (joined.contains("实付款") || joined.contains("待发货")))
         val hasPendingPaymentAction = joined.contains("未完成支付") || joined.contains("放弃支付") ||
                 joined.contains("订单待付款") || joined.contains("需付款") || joined.contains("合计待支付")
         if (hasPendingPaymentAction && !hasExplicitSuccess) {
@@ -677,10 +690,11 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         if (isShoppingApp) {
             val hasClearShoppingSuccess = joined.contains("支付成功") || joined.contains("付款成功") ||
                     joined.contains("购买成功") || joined.contains("交易成功") || joined.contains("买家已付款") ||
-                    joined.contains("等待卖家发货") || joined.contains("下单成功") ||
+                    joined.contains("等待卖家发货") || joined.contains("等待商家发货") || joined.contains("下单成功") ||
+                    joined.contains("等待商家接单") || joined.contains("商家已接单") || joined.contains("正在备货") ||
                     joined.contains("订单已完成") || joined.contains("订单已支付") ||
                     joined.contains("免密支付成功") || joined.contains("自动扣款成功") ||
-                    joined.contains("已成功付款")
+                    joined.contains("已成功付款") || (joined.contains("闪购") && (joined.contains("实付款") || joined.contains("待发货") || joined.contains("成功")))
             if (!hasClearShoppingSuccess) {
                 AutoRecordDiagnosticLogger.log(
                     CaptureSnapshot(
@@ -911,8 +925,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             when {
                 type == TransactionType.INCOME -> "微信转账收款"
                 pkg == "com.jingdong.app.mall" -> if (rawContext.contains("外卖") || rawContext.contains("送达") || rawContext.contains("骑手")) "京东外卖" else "京东购物"
-                pkg in listOf("com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless") -> "淘宝购物"
-                pkg in listOf("com.sankuai.meituan", "com.sankuai.meituan.takeoutnew") -> "美团外卖"
+                pkg in listOf("com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless") -> if (rawContext.contains("闪购")) "淘宝闪购" else "淘宝购物"
+                pkg in listOf("com.sankuai.meituan", "com.sankuai.meituan.takeoutnew") -> if (rawContext.contains("闪购")) "美团闪购" else "美团外卖"
                 else -> "日常消费"
             }
         }
@@ -1171,61 +1185,39 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         }
 
         // 7. 电商应用（淘宝/天猫/淘特/闲鱼/京东/美团/饿了么）订单列表与历史查单翻账流特征拦截！
-        // 坚决杜绝“点进淘宝看全部订单/待发货/待收货/订单详情，却将历史旧订单误记账”！
         if (isShopping) {
-            // (1) 【订单详情页铁证拦截】：用户从列表点进某笔历史订单查看详情、物流轨迹或联系商家
-            // 即时支付完成收银台绝对不会包含“订单详情”、“订单编号”、“申请售后”、“联系卖家”
-            val hasOrderDetailMarkers = listOf(
-                "订单详情", "订单编号", "订单号", "申请售后", "联系卖家",
-                "订单信息", "下单时间", "成交时间"
+            // (1) 售后与已完结历史旧单专属操作拦截（刚付完款的订单绝不会出现“申请售后/确认收货/去评价/再次购买/投诉商家/钱款去向”）
+            val hasHistoryOnlyActions = listOf(
+                "申请售后", "确认收货", "去评价", "追加评价", "再次购买", "再买一单", "投诉商家", "钱款去向", "退款成功"
             ).any { joined.contains(it) }
-            if (hasOrderDetailMarkers) {
+            if (hasHistoryOnlyActions) {
                 return true
             }
 
-            // (2) 订单分类 Tab 栏与订单搜索顶栏特征（即时单笔收银台绝不会有一整排订单分类 Tab 栏）：
+            // (2) 订单分类 Tab 栏与订单搜索顶栏特征（典型历史订单管理/搜索列表页，如“全部订单+待收货+搜索订单”）
             val statusTabCount = listOf(
                 "待付款", "待发货", "待收货", "待评价", 
-                "退款/售后", "退款/退货", "待收", "已完成", "已取消"
+                "退款/售后", "退款/退货"
             ).count { joined.contains(it) }
             val hasOrderListNav = listOf(
-                "全部订单", "我的订单", "搜索订单", "订单列表", "全部", "管理", "筛选", "订单回收站"
+                "全部订单", "搜索订单", "订单回收站"
             ).any { joined.contains(it) }
-            if (statusTabCount >= 2 && (hasOrderListNav || joined.contains("全部") || joined.contains("管理") || joined.contains("筛选"))) {
+            if (hasOrderListNav && statusTabCount >= 2) {
                 return true
             }
 
-            // (3) 订单卡片列表多单共存铁证（统计页面中“交易成功”、“实付款”、“查看物流”、“追加评价”出现次数）：
+            // (3) 订单卡片列表多单共存铁证（页面中出现 2 笔以上独立订单）
             val countTradeSuccess = Regex("""交易成功""").findAll(joined).count()
             val countBuyerPaid = Regex("""买家已付款""").findAll(joined).count()
             val countActualPay = Regex("""实付款""").findAll(joined).count()
             val countViewLogistics = Regex("""查看物流""").findAll(joined).count()
-            val countEvaluate = Regex("""(追加评价|去评价|评价晒单)""").findAll(joined).count()
-            val countRebuy = Regex("""(再买一单|再次购买|常购清单)""").findAll(joined).count()
             val countOrderNo = Regex("""(订单号|订单编号)\s*[:：]?\s*\d{8,}""").findAll(joined).count()
 
-            // 多卡片共存 → 铁证直接拦截
             if (countActualPay >= 2) return true
             if (countTradeSuccess >= 2 || countBuyerPaid >= 2) return true
-            if (countViewLogistics >= 2 || countEvaluate >= 2 || countRebuy >= 2) return true
-            if (countOrderNo >= 2) return true
+            if (countViewLogistics >= 2 || countOrderNo >= 2) return true
 
-            // (4) 【列表底部单卡片残留封堵】：
-            // 即使用户滑到底部导致 Tab 栏滚出屏幕、只露出最后 1 张卡片，
-            // 只要出现“查看物流”或“追加评价”或“再买一单”等历史订单专属操作按钮，100% 拦截！
-            val hasHistoryOnlyActions = countViewLogistics >= 1 || countEvaluate >= 1 || countRebuy >= 1
-            if (hasHistoryOnlyActions && (countTradeSuccess >= 1 || countActualPay >= 1)) {
-                return true
-            }
-
-            // (5) 单卡片无明确即时支付标志拦截：
-            // 即时支付完成页必定带有“支付成功”或“付款成功”，而历史订单列表卡片仅有“交易成功”或“买家已付款”
-            val hasPaySuccessMarker = joined.contains("支付成功") || joined.contains("付款成功") || joined.contains("支付结果")
-            if (!hasPaySuccessMarker && (countTradeSuccess >= 1 || countBuyerPaid >= 1) && countActualPay >= 1) {
-                return true
-            }
-
-            // (6) 伴随订单搜索管理栏与订单状态
+            // (4) 伴随订单搜索管理栏与多状态
             if (hasOrderListNav && (countTradeSuccess >= 1 || countActualPay >= 1) &&
                 (joined.contains("待付款") || joined.contains("待发货") || joined.contains("待收货") || joined.contains("退款/售后"))) {
                 return true
