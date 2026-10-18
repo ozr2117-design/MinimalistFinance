@@ -380,6 +380,45 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return
         }
 
+        // 核心排除 3：严密拦截一切退款、退费、退回通知（退款绝非消费支出！杜绝退款到账被反向记成支出的重大漏洞）
+        val isRefundNotif = combined.contains("退款") || combined.contains("已退款") ||
+                combined.contains("退回") || combined.contains("退款到账") ||
+                combined.contains("退款成功") || combined.contains("退费") ||
+                combined.contains("退保") || combined.contains("退款入账") ||
+                combined.contains("款项退回")
+        if (isRefundNotif) {
+            AutoRecordDiagnosticLogger.log(
+                CaptureSnapshot(
+                    pkg = pkg,
+                    channel = "通知栏 (Notification)",
+                    status = "⛔ 拦截: 命中退款/退费通知 (非日常消费支出)",
+                    rawTexts = listOf(combined)
+                )
+            )
+            return
+        }
+
+        // 核心排除 4：拦截物流、理财收益、还款提醒通知（非即时扣款交易）
+        val isServiceOrWealthNotif = combined.contains("收益") || combined.contains("昨日收益") ||
+                combined.contains("基金收益") || combined.contains("理财收益") ||
+                combined.contains("物流") || combined.contains("快递") ||
+                combined.contains("已发货") || combined.contains("已签收") ||
+                combined.contains("取件码") || combined.contains("派送中") ||
+                combined.contains("待还款") || combined.contains("还款日") ||
+                combined.contains("账单日") || combined.contains("账单已出") ||
+                combined.contains("能量") || combined.contains("积分")
+        if (isServiceOrWealthNotif) {
+            AutoRecordDiagnosticLogger.log(
+                CaptureSnapshot(
+                    pkg = pkg,
+                    channel = "通知栏 (Notification)",
+                    status = "⛔ 拦截: 命中物流/理财收益/账户提醒通知",
+                    rawTexts = listOf(combined)
+                )
+            )
+            return
+        }
+
         // 识别微信、支付宝、云闪付、淘宝等的通知（支出或收入）
         var notifType: TransactionType? = null
         if (pkg == "com.tencent.mm") {
@@ -387,26 +426,34 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 combined.contains("资金已存入零钱") || combined.contains("微信支付收款") || combined.contains("二维码收款到账") ||
                 combined.contains("微信收款助手")) {
                 notifType = TransactionType.INCOME
-            } else if (title.contains("微信支付") || combined.contains("微信支付凭证") ||
-                combined.contains("你有一笔微信支付支出") || combined.contains("成功付款") ||
+            } else if (
+                combined.contains("微信支付凭证") || combined.contains("你有一笔微信支付支出") ||
+                combined.contains("成功付款") || combined.contains("付款成功") ||
                 combined.contains("支付成功") || combined.contains("已扣款") ||
-                combined.contains("特约商户") || combined.contains("完成支付") ||
-                (combined.contains("信用卡") && (combined.contains("消费") || combined.contains("扣款") || combined.contains("支出") || combined.contains("支付"))) ||
+                combined.contains("扣款成功") || combined.contains("完成支付") ||
+                (title.contains("微信支付") && (combined.contains("消费") || combined.contains("扣款") || combined.contains("支出") || combined.contains("付款"))) ||
+                (combined.contains("信用卡") && (combined.contains("消费") || combined.contains("扣款") || combined.contains("支出") || combined.contains("付款"))) ||
                 combined.contains("消费支出") ||
-                combined.contains("支付停车费") || combined.contains("停车缴费")) {
+                combined.contains("支付停车费") || combined.contains("停车缴费")
+            ) {
                 notifType = TransactionType.EXPENSE
             }
         } else if (pkg == "com.eg.android.AlipayGphone") {
             if (combined.contains("收到转账") || combined.contains("成功收款") || combined.contains("收款到账") ||
                 combined.contains("支付宝收款到账") || combined.contains("收到一笔款项")) {
                 notifType = TransactionType.INCOME
-            } else if (title.contains("支付宝") || combined.contains("成功付款") ||
-                combined.contains("交易提醒") || combined.contains("支付成功") ||
-                combined.contains("花呗") || combined.contains("扣款成功") ||
-                combined.contains("支付凭证") || combined.contains("付款凭证") ||
-                combined.contains("付款支出") || (combined.contains("你有一笔") && combined.contains("支出")) ||
-                combined.contains("付款") || combined.contains("支付") ||
-                combined.contains("停车缴费") || combined.contains("已扣费")) {
+            } else if (
+                combined.contains("成功付款") || combined.contains("付款成功") ||
+                combined.contains("支付成功") || combined.contains("已成功付款") ||
+                combined.contains("扣款成功") || combined.contains("自动扣费成功") ||
+                combined.contains("自动扣款成功") || combined.contains("付款支出") ||
+                combined.contains("完成支付") ||
+                (combined.contains("交易提醒") && (combined.contains("支出") || combined.contains("扣款") || combined.contains("消费") || combined.contains("付款"))) ||
+                ((combined.contains("支付凭证") || combined.contains("付款凭证")) && !combined.contains("未支付")) ||
+                (combined.contains("花呗") && (combined.contains("扣款") || combined.contains("支付") || combined.contains("付款"))) ||
+                (combined.contains("你有一笔") && combined.contains("支出")) ||
+                combined.contains("停车缴费") || combined.contains("已扣费")
+            ) {
                 notifType = TransactionType.EXPENSE
             }
         } else if (pkg == "com.unionpay") {
@@ -602,6 +649,19 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                     joined.contains("最高立减") || joined.contains("满减") || joined.contains("待领取") ||
                     joined.contains("活动") || joined.contains("专享")
             hasUnionpaySuccess && !isMarketingOrAd
+        } else if (pkg == "com.eg.android.AlipayGphone") {
+            // 支付宝必须具备明确的即时付款/扣款成功语义（严禁被历史账单或退款详情中的“交易成功”误判）
+            joined.contains("支付成功") ||
+            joined.contains("付款成功") ||
+            joined.contains("向商家付款成功") ||
+            joined.contains("扫码付款成功") ||
+            joined.contains("已成功付款") ||
+            joined.contains("免密支付成功") ||
+            joined.contains("自动扣款成功") ||
+            joined.contains("扣款成功") ||
+            (joined.contains("成功付款") && !joined.contains("未支付")) ||
+            (joined.contains("支付停车费") && joined.contains("成功")) ||
+            (joined.contains("停车缴费") && joined.contains("成功"))
         } else {
             joined.contains("支付成功") ||
             joined.contains("付款成功") ||
@@ -633,6 +693,23 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             (joined.contains("特约商户") && (joined.contains("支付成功") || joined.contains("交易成功"))) ||
             joined.contains("扣款成功") ||
             joined.contains("银联付款成功")
+        }
+
+        // 核心排除：若页面为退款、退费相关页面，严禁判定为支出！
+        val hasRefundSign = joined.contains("退款") || joined.contains("已退款") ||
+                joined.contains("退费") || joined.contains("退保") ||
+                joined.contains("退回支付宝") || joined.contains("退回银行卡") ||
+                joined.contains("退款详情") || joined.contains("钱款去向")
+        if (hasRefundSign) {
+            AutoRecordDiagnosticLogger.log(
+                CaptureSnapshot(
+                    pkg = pkg,
+                    channel = "界面窗口 (Window)",
+                    status = "⛔ 拦截: 页面包含退款/退费信息 (非支出场景)",
+                    rawTexts = texts
+                )
+            )
+            return
         }
 
         val targetType = when {
@@ -1077,10 +1154,20 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         }
         // 3. 支付宝 (com.eg.android.AlipayGphone) 主界面
         if (pkg == "com.eg.android.AlipayGphone") {
+            // 底部导航栏特征
+            val hasAlipayBottomNav = texts.contains("首页") && texts.contains("我的") &&
+                    (texts.contains("消息") || texts.contains("理财") || texts.contains("生活") || texts.contains("视频"))
+            if (hasAlipayBottomNav) {
+                return true
+            }
             if (texts.contains("理财") && texts.contains("生活") && texts.contains("消息") && texts.contains("我的")) {
                 return true
             }
-            if (texts.contains("扫一扫") && texts.contains("收钱") && texts.contains("付钱") && texts.contains("出行")) {
+            // 顶部核心快捷操作栏：扫一扫 + (收付款/收钱/付钱) + (出行/卡包/余额宝/转账)
+            val hasAlipayTopShortcuts = texts.contains("扫一扫") &&
+                    (texts.contains("收付款") || texts.contains("收钱") || texts.contains("付钱")) &&
+                    (texts.contains("出行") || texts.contains("卡包") || texts.contains("余额宝") || texts.contains("转账"))
+            if (hasAlipayTopShortcuts) {
                 return true
             }
         }
@@ -1173,6 +1260,27 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             if (chatAndFeedKeywords.any { joined.contains(it) }) {
                 return true
             }
+        }
+
+        // 5.1 支付宝消息列表 / 支付助手 / 服务消息流 / 动账提醒聚合页
+        if (pkg == "com.eg.android.AlipayGphone") {
+            val alipayFeedKeywords = listOf(
+                "支付助手", "服务消息", "动账提醒", "交易提醒", "消息盒子", "生活号",
+                "全部标记已读", "消息设置", "订阅消息"
+            )
+            if (alipayFeedKeywords.any { joined.contains(it) }) {
+                return true
+            }
+        }
+
+        // 5.2 全局售后与退款详情页面拦截（无论是电商、微信还是支付宝，退款详情页绝不可作为日常消费记账）
+        val globalRefundPageMarkers = listOf(
+            "退款详情", "退款成功", "退款中", "退款处理中", "钱款去向", "退回支付宝",
+            "退回银行卡", "退款金额", "退款总金额", "查看退款", "售后详情", "协商历史",
+            "退款已入账", "退回微信", "退款进度"
+        )
+        if (globalRefundPageMarkers.any { joined.contains(it) }) {
+            return true
         }
 
         // 6. 屏幕中出现多笔独立金额（账单列表或聊天记录流的典型特征）

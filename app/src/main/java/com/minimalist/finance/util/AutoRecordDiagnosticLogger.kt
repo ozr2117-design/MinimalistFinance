@@ -32,18 +32,17 @@ data class CaptureSnapshot(
 )
 
 object AutoRecordDiagnosticLogger {
-    private const val MAX_ENTRIES = 25
+    private const val MAX_ENTRIES = 50
     private val buffer = ConcurrentLinkedDeque<CaptureSnapshot>()
 
     @Synchronized
     fun log(snapshot: CaptureSnapshot) {
         val first = buffer.peekFirst()
-        // 相邻拦截事件去重：若是同包名同拦截原因、在 5 秒内连续派发的滑屏事件，合并计数，绝不挤爆缓冲区！
+        // 相邻拦截事件去重：若是同包名同拦截原因、在 5 秒内连续派发的滑屏/重绘事件，合并计数，绝不挤爆缓冲区！
         if (first != null && !snapshot.status.startsWith("✅") &&
             first.pkg == snapshot.pkg &&
             first.status == snapshot.status &&
             first.channel == snapshot.channel &&
-            first.rawTexts.take(3) == snapshot.rawTexts.take(3) &&
             snapshot.timestamp - first.timestamp < 5000L
         ) {
             first.repeatCount += 1
