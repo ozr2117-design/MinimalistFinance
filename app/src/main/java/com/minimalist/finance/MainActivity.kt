@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.minimalist.finance.util.AutoRecordDiagnosticLogger.init(applicationContext)
         setContent {
             val themeMode by viewModel.currentThemeMode.collectAsState()
 

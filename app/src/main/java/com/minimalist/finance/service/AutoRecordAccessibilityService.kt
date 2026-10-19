@@ -183,7 +183,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                     lower.contains("工资") || lower.contains("薪水") || lower.contains("月薪") -> "工资"
                     lower.contains("奖金") || lower.contains("年终奖") -> "奖金"
                     lower.contains("生活费") -> "生活费"
-                    lower.contains("外快") || lower.contains("兼职") -> "外快"
+                    lower.contains("外快") || lower.contains("兼职") || lower.contains("闲鱼") || lower.contains("二手") -> "外快"
                     else -> "其它"
                 }
             }
@@ -227,6 +227,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         isServiceRunning = true
+        AutoRecordDiagnosticLogger.init(applicationContext)
 
         // 动态提升无障碍配置，覆盖全屏、对话框、H5 与非重要节点
         try {
@@ -464,10 +465,34 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 combined.contains("消费支出") || combined.contains("银联付款成功")) {
                 notifType = TransactionType.EXPENSE
             }
-        } else if (pkg in listOf("com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless", "com.taobao.idlefish")) {
+        } else if (pkg == "com.taobao.idlefish") {
+            // 闲鱼专用通知通道：严密区分买家与卖家身份，杜绝卖家发货提醒被误记为消费支出
+            val isIdlefishSellerNotif = combined.contains("买家已付款") || combined.contains("请发货") ||
+                    combined.contains("等待发货") || combined.contains("买家已拍下") ||
+                    combined.contains("卖出") || combined.contains("去发货")
+            if (isIdlefishSellerNotif) {
+                AutoRecordDiagnosticLogger.log(
+                    CaptureSnapshot(
+                        pkg = pkg,
+                        channel = "通知栏 (Notification)",
+                        status = "⛔ 拦截: 闲鱼卖家发货/买家付款提醒 (非消费支出)",
+                        rawTexts = listOf(combined)
+                    )
+                )
+                return
+            }
+            if (combined.contains("已转入支付宝") || combined.contains("已打款") ||
+                combined.contains("收款到账") || combined.contains("款项到账") ||
+                combined.contains("款项已转入")) {
+                notifType = TransactionType.INCOME
+            } else if ((combined.contains("支付成功") || combined.contains("付款成功")) &&
+                !combined.contains("发货") && !combined.contains("卖出")) {
+                notifType = TransactionType.EXPENSE
+            }
+        } else if (pkg in listOf("com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless")) {
             if (combined.contains("支付成功") || combined.contains("付款成功") || combined.contains("购买成功") ||
                 combined.contains("交易成功") || combined.contains("已付款") || combined.contains("已支付") ||
-                combined.contains("等待卖家发货") || combined.contains("买家已付款")) {
+                combined.contains("等待卖家发货")) {
                 notifType = TransactionType.EXPENSE
             }
         } else {
@@ -614,7 +639,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return
         }
 
-        // 1. 收入语义判定 (微信转账收款、存入零钱、二维码收款等)
+        // 1. 收入语义判定 (微信转账收款、存入零钱、二维码收款、闲鱼卖出打款等)
         val isIncome = joined.contains("你已收款") ||
                 joined.contains("资金已存入零钱") ||
                 joined.contains("已存入零钱") ||
@@ -627,7 +652,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 joined.contains("向你转账") ||
                 joined.contains("成功收款") ||
                 (joined.contains("微信转账") && joined.contains("已收款")) ||
-                (joined.contains("转账时间") && joined.contains("收款时间"))
+                (joined.contains("转账时间") && joined.contains("收款时间")) ||
+                (pkg == "com.taobao.idlefish" && (joined.contains("钱款已转入") || joined.contains("已打款至支付宝") || joined.contains("钱款入账") || (joined.contains("实收款") && joined.contains("交易成功"))))
 
         // 2. 支付/扣款成功语义判定 (支出 - 必须有明确的即时已完成/已扣款成功标志，微信内严格限定收银台完成页)
         val isExpense = if (pkg == "com.tencent.mm") {
@@ -662,13 +688,22 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             (joined.contains("成功付款") && !joined.contains("未支付")) ||
             (joined.contains("支付停车费") && joined.contains("成功")) ||
             (joined.contains("停车缴费") && joined.contains("成功"))
+        } else if (pkg == "com.taobao.idlefish") {
+            // 闲鱼买家支出：必须是明确的买家付款完成凭证，严禁包含任何卖家发货/卖出关键词
+            val hasIdlefishPaySuccess = joined.contains("支付成功") || joined.contains("付款成功") ||
+                    (joined.contains("购买成功") && joined.contains("实付款"))
+            val isSellerPage = joined.contains("去发货") || joined.contains("联系买家") ||
+                    joined.contains("买家已付款") || joined.contains("我卖出的") ||
+                    joined.contains("实收款") || joined.contains("在线寄件") ||
+                    joined.contains("预约寄件") || joined.contains("卖出的宝贝") ||
+                    joined.contains("等待发货") || joined.contains("立即发货")
+            hasIdlefishPaySuccess && !isSellerPage
         } else {
             joined.contains("支付成功") ||
             joined.contains("付款成功") ||
             joined.contains("交易成功") ||
             joined.contains("支付已完成") ||
             joined.contains("购买成功") ||
-            joined.contains("买家已付款") ||
             joined.contains("等待卖家发货") ||
             joined.contains("等待商家发货") ||
             joined.contains("等待商家接单") ||
@@ -1000,7 +1035,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             partyName
         } else {
             when {
-                type == TransactionType.INCOME -> "微信转账收款"
+                type == TransactionType.INCOME -> if (pkg == "com.taobao.idlefish") "闲鱼卖出收款" else "微信转账收款"
+                pkg == "com.taobao.idlefish" -> "闲鱼二手"
                 pkg == "com.jingdong.app.mall" -> if (rawContext.contains("外卖") || rawContext.contains("送达") || rawContext.contains("骑手")) "京东外卖" else "京东购物"
                 pkg in listOf("com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless") -> if (rawContext.contains("闪购")) "淘宝闪购" else "淘宝购物"
                 pkg in listOf("com.sankuai.meituan", "com.sankuai.meituan.takeoutnew") -> if (rawContext.contains("闪购")) "美团闪购" else "美团外卖"
@@ -1281,6 +1317,33 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         )
         if (globalRefundPageMarkers.any { joined.contains(it) }) {
             return true
+        }
+
+        // 5.3 闲鱼 (com.taobao.idlefish) 卖家管理流与二手聊天流拦截
+        if (pkg == "com.taobao.idlefish") {
+            // (1) 卖家视角：严密拦截“我卖出的”、发货管理、待发货页面，绝不作为支出！
+            val isIdlefishSeller = joined.contains("我卖出的") || joined.contains("去发货") ||
+                    joined.contains("等待发货") || joined.contains("立即发货") ||
+                    joined.contains("买家已付款") || joined.contains("买家已拍下") ||
+                    joined.contains("联系买家") || joined.contains("预约寄件") ||
+                    joined.contains("在线寄件") || joined.contains("扫码寄件") ||
+                    joined.contains("无需寄件") || joined.contains("实收款") ||
+                    joined.contains("买家确认收货") || joined.contains("催买家确认") ||
+                    joined.contains("卖出的宝贝") || joined.contains("卖出")
+            if (isIdlefishSeller) {
+                // 如果是交易成功且明确打款到账，放行给收入判定；其余任何发货/卖出/买家付款管理页一律拦截！
+                val isPayoutSuccess = joined.contains("钱款已转入") || joined.contains("已打款") || joined.contains("钱款入账")
+                if (!isPayoutSuccess) {
+                    return true
+                }
+            }
+            // (2) 闲鱼私聊沟通与商品留言流
+            val isIdlefishChat = joined.contains("发暗号") || joined.contains("发消息") ||
+                    joined.contains("聊一聊") || (texts.contains("发送") && texts.contains("切换到输入法")) ||
+                    joined.contains("联系卖家") || joined.contains("问问卖家")
+            if (isIdlefishChat) {
+                return true
+            }
         }
 
         // 6. 屏幕中出现多笔独立金额（账单列表或聊天记录流的典型特征）

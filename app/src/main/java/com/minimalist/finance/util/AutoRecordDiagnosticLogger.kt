@@ -1,11 +1,14 @@
 package com.minimalist.finance.util
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
@@ -18,6 +21,7 @@ import java.util.concurrent.ConcurrentLinkedDeque
  *
  * 用于在遇到漏记、误记或重复记账时，一键导出最近发生的无障碍与通知栏抓取事件，
  * 记录原始文本树、判定原因与提取结果，供开发者极速排查与单测回归。
+ * 支持本地磁盘 JSON 镜像持久化，彻底防止应用被系统回收导致日志丢失。
  */
 data class CaptureSnapshot(
     var timestamp: Long = System.currentTimeMillis(),
@@ -33,10 +37,93 @@ data class CaptureSnapshot(
 
 object AutoRecordDiagnosticLogger {
     private const val MAX_ENTRIES = 50
+    private const val CACHE_FILE = "autorecord_diagnostic_snapshots.json"
     private val buffer = ConcurrentLinkedDeque<CaptureSnapshot>()
+    private var appContext: Context? = null
+    private var isLoadedFromDisk = false
+
+    fun init(context: Context) {
+        if (appContext == null) {
+            appContext = context.applicationContext
+        }
+        if (!isLoadedFromDisk) {
+            loadFromDisk()
+        }
+    }
+
+    @Synchronized
+    private fun loadFromDisk() {
+        val ctx = appContext ?: return
+        if (isLoadedFromDisk) return
+        isLoadedFromDisk = true
+        try {
+            val file = File(ctx.filesDir, CACHE_FILE)
+            if (!file.exists()) return
+            val jsonStr = file.readText(Charsets.UTF_8)
+            if (jsonStr.isBlank()) return
+            val jsonArray = JSONArray(jsonStr)
+            val list = mutableListOf<CaptureSnapshot>()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val rawArray = obj.optJSONArray("rawTexts")
+                val rawTexts = mutableListOf<String>()
+                if (rawArray != null) {
+                    for (j in 0 until rawArray.length()) {
+                        rawTexts.add(rawArray.getString(j))
+                    }
+                }
+                list.add(
+                    CaptureSnapshot(
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                        pkg = obj.optString("pkg", ""),
+                        channel = obj.optString("channel", ""),
+                        status = obj.optString("status", ""),
+                        extractedAmount = if (obj.has("extractedAmount")) obj.optDouble("extractedAmount") else null,
+                        extractedMerchant = if (obj.has("extractedMerchant")) obj.optString("extractedMerchant") else null,
+                        extractedAccount = if (obj.has("extractedAccount")) obj.optString("extractedAccount") else null,
+                        rawTexts = rawTexts,
+                        repeatCount = obj.optInt("repeatCount", 1)
+                    )
+                )
+            }
+            buffer.clear()
+            list.forEach { buffer.addLast(it) }
+        } catch (_: Exception) {}
+    }
+
+    private fun persistToDiskAsync() {
+        val ctx = appContext ?: return
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val snapshots = buffer.toList()
+                val jsonArray = JSONArray()
+                snapshots.forEach { s ->
+                    val obj = JSONObject().apply {
+                        put("timestamp", s.timestamp)
+                        put("pkg", s.pkg)
+                        put("channel", s.channel)
+                        put("status", s.status)
+                        s.extractedAmount?.let { put("extractedAmount", it) }
+                        s.extractedMerchant?.let { put("extractedMerchant", it) }
+                        s.extractedAccount?.let { put("extractedAccount", it) }
+                        put("repeatCount", s.repeatCount)
+                        val rawArray = JSONArray()
+                        s.rawTexts.take(40).forEach { rawArray.put(it) }
+                        put("rawTexts", rawArray)
+                    }
+                    jsonArray.put(obj)
+                }
+                val file = File(ctx.filesDir, CACHE_FILE)
+                file.writeText(jsonArray.toString(), Charsets.UTF_8)
+            } catch (_: Exception) {}
+        }
+    }
 
     @Synchronized
     fun log(snapshot: CaptureSnapshot) {
+        if (!isLoadedFromDisk && appContext != null) {
+            loadFromDisk()
+        }
         val first = buffer.peekFirst()
         // 相邻拦截事件去重：若是同包名同拦截原因、在 5 秒内连续派发的滑屏/重绘事件，合并计数，绝不挤爆缓冲区！
         if (first != null && !snapshot.status.startsWith("✅") &&
@@ -47,6 +134,7 @@ object AutoRecordDiagnosticLogger {
         ) {
             first.repeatCount += 1
             first.timestamp = snapshot.timestamp
+            persistToDiskAsync()
             return
         }
 
@@ -54,13 +142,20 @@ object AutoRecordDiagnosticLogger {
         while (buffer.size > MAX_ENTRIES) {
             buffer.removeLast()
         }
+        persistToDiskAsync()
     }
 
     fun getSnapshots(): List<CaptureSnapshot> {
+        if (!isLoadedFromDisk && appContext != null) {
+            loadFromDisk()
+        }
         return buffer.toList()
     }
 
     fun getFormattedLogs(): String {
+        if (!isLoadedFromDisk && appContext != null) {
+            loadFromDisk()
+        }
         if (buffer.isEmpty()) {
             return "【数簿自动记账诊断日志】\n暂无最近抓取事件记录（请在发生支付或在微信/淘宝/京东浏览后再试）。"
         }
