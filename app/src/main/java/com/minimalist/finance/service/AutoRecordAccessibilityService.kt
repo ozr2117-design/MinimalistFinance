@@ -1347,11 +1347,20 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         }
 
         // 6. 屏幕中出现多笔独立金额（账单列表或聊天记录流的典型特征）
-        // 严格限定于微信 (com.tencent.mm)：电商订单页有原价、店铺满减、优惠券、运费、实付款，多笔金额属于正常现象，绝不可一刀切拦截！
+        // 关键防御：若页面明确为微信支付即时完成页（包含“支付成功/付款成功”以及“完成/关闭”），
+        // 即使享受了银行卡立减、优惠券、商家抵扣等导致页面展示了原价与实付多笔金额，绝不可当作账单列表误杀！
         if (pkg == "com.tencent.mm") {
-            val countCurrencies = Regex("""[¥￥]\s*-?\s*[0-9]+""").findAll(joined).count()
-            if (countCurrencies >= 3) {
-                return true
+            val isWechatImmediateDone = (joined.contains("支付成功") || joined.contains("付款成功")) &&
+                    (texts.contains("完成") || texts.contains("关闭") || joined.contains("完成") || joined.contains("关闭"))
+            if (!isWechatImmediateDone) {
+                // 非即时完成页时，仅当出现多笔不同数值的独立金额时才作为账单流拦截
+                val distinctAmounts = Regex("""[¥￥]\s*-?\s*([0-9]+\.?[0-9]*)""").findAll(joined)
+                    .mapNotNull { it.groupValues[1].toDoubleOrNull() }
+                    .distinct()
+                    .count()
+                if (distinctAmounts >= 3) {
+                    return true
+                }
             }
         }
 

@@ -197,8 +197,8 @@ object AutoRecordDiagnosticLogger {
                 val url = URL("https://shubu-report.ozr2117.workers.dev")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
-                conn.connectTimeout = 10_000
-                conn.readTimeout = 10_000
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 15_000
                 conn.doOutput = true
                 conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
 
