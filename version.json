@@ -1,8 +1,8 @@
 {
-  "versionCode": 33,
-  "versionName": "1.3.2",
-  "releaseDate": "2026-10-19",
-  "changelog": "1. 彻底解决闲鱼交易误记支出：建立闲鱼专属判定通道，精准区分买家与卖家身份，杜绝卖家发货提醒（买家已付款、等待发货）被误判为日常消费支出\n2. 闲鱼交易全状态覆盖：卖家发货及私聊管理流坚决拦截防误触；交易成功款项入账智能识别为收入（归入“外快”分类并标记“闲鱼卖出收款”）\n3. 诊断日志全天持久化：引入本地磁盘 JSON 镜像，即使应用被系统后台回收或经历重启，历史排查快照永不丢失，跨时段报错随时完整呈现",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.2/shubu-v1.3.2.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.2/shubu-v1.3.2.apk"
+  "versionCode": 34,
+  "versionName": "1.3.3",
+  "releaseDate": "2026-10-22",
+  "changelog": "1. 全新视觉焕新：上线【老钱风 × 新时代科技感】黑曜石天平（Obsidian Balance）极简奢雅新图标，告别传统老土记账元素，完美融入现代暗调质感桌面\n2. 高清多分辨率适配：全面覆盖 xxxhdpi、xxhdpi、xhdpi 等主流 Android 屏幕像素密度，圆形与圆角自适应双模支持，桌面边缘清晰利落",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.3/shubu-v1.3.3.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.3/shubu-v1.3.3.apk"
 }
