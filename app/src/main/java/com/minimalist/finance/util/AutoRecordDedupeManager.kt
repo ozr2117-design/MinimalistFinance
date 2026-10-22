@@ -253,8 +253,8 @@ object AutoRecordDedupeManager {
             val sdf = SimpleDateFormat("yyyyMMddHHmm", Locale.CHINA)
             sdf.format(Date(billTimestamp))
         } else {
-            // 默认取当天日期 (yyyyMMdd)
-            val sdf = SimpleDateFormat("yyyyMMdd", Locale.CHINA)
+            // 即时消费默认取当前时间精确到分钟 (yyyyMMddHHmm)，杜绝天级指纹导致全天同一商户无法二次记账的重大硬伤
+            val sdf = SimpleDateFormat("yyyyMMddHHmm", Locale.CHINA)
             sdf.format(Date())
         }
         return "${pkg}_${type.name}_${amountStr}_${cleanMerchant}_$timeKey"
@@ -270,5 +270,20 @@ object AutoRecordDedupeManager {
         calendar.set(java.util.Calendar.SECOND, 0)
         calendar.set(java.util.Calendar.MILLISECOND, 0)
         return calendar.timeInMillis
+    }
+
+    /**
+     * 一键重置防重缓存（用于用户清空流水或调试时彻底还原初始环境）
+     */
+    @Synchronized
+    fun clearAll(context: Context) {
+        memoryOrderCache.clear()
+        memoryFingerprintCache.clear()
+        debounceCache.clear()
+        hedgePairCache.clear()
+        try {
+            val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            sp.edit().clear().apply()
+        } catch (_: Exception) {}
     }
 }

@@ -142,10 +142,16 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             ioScope.launch {
                 val db = AppDatabase.getDatabase(context, ioScope)
                 val categoryName = classifyCategory(merchantName, type)
+                val targetBookId = try {
+                    db.bookDao().getAllBooksList().firstOrNull { it.isDefault }?.id ?: 1L
+                } catch (_: Exception) {
+                    1L
+                }
+                val standardizedAmount = Math.round(amount * 100.0) / 100.0
                 val record = Record(
-                    bookId = 1L,
+                    bookId = targetBookId,
                     type = type,
-                    amount = amount,
+                    amount = standardizedAmount,
                     categoryName = categoryName,
                     accountName = accountName,
                     remark = merchantName,
@@ -1050,7 +1056,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             try {
                 val db = AppDatabase.getDatabase(applicationContext, scope)
 
-                // 5. 数据库订单号终身排重：若数据库中已经存过这个微信/支付宝交易单号，绝对不再记！
+                // 5. 数据库订单号终身排重：若已提取到真实交易单号，且数据库中已存在，绝对确权拦截（零误杀）
                 if (!orderId.isNullOrBlank()) {
                     val existingCount = db.recordDao().getRecordCountByOrderId(orderId)
                     if (existingCount > 0) {
@@ -1067,50 +1073,69 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                         )
                         return@launch
                     }
-                }
-
-                // 6. 数据库当天同商户同金额排重拦截：
-                // 如果商户名称明确（如“肯德基”），且今天已经记过一笔完全一样的商户+金额，绝对不再记！
-                if (partyName.isNotBlank() && !isSystemWord(partyName)) {
-                    val todayStart = AutoRecordDedupeManager.getTodayStartMillis()
-                    val existingMerchantCount = db.recordDao().getSameMerchantRecordCount(
-                        amount = amount,
-                        type = type,
-                        merchant = partyName,
-                        sinceTimestamp = todayStart
-                    )
-                    if (existingMerchantCount > 0) {
-                        AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
-                        AutoRecordDiagnosticLogger.log(
-                            CaptureSnapshot(
-                                pkg = pkg,
-                                channel = channel,
-                                status = "⛔ 拦截: 当天已存在相同商户同金额记录 (商户:$partyName, 金额:¥$amount)",
-                                extractedAmount = amount,
-                                extractedMerchant = displayName,
-                                rawTexts = rawTexts
-                            )
+                } else {
+                    // 6. 无单号场景（如线下个人码/路边摊收款码/即时轻量凭证）的短周期防抖排重：
+                    // 仅在 60 秒内同一商户且同一金额才判定为页面重绘/前后台切换残留；
+                    // 彻底废除“当天同商户全天禁用”与“10分钟全局盲目熔断”的反人类误杀！
+                    val duplicateWindow = 60_000L // 60秒
+                    if (partyName.isNotBlank() && !isSystemWord(partyName)) {
+                        val recentSameMerchantCount = db.recordDao().getSameMerchantRecordCount(
+                            amount = amount,
+                            type = type,
+                            merchant = partyName,
+                            sinceTimestamp = now - duplicateWindow
                         )
-                        return@launch
+                        if (recentSameMerchantCount > 0) {
+                            AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
+                            AutoRecordDiagnosticLogger.log(
+                                CaptureSnapshot(
+                                    pkg = pkg,
+                                    channel = channel,
+                                    status = "⛔ 拦截: 60秒内已存在相同商户同金额记账 (商户:$partyName, 金额:¥$amount)",
+                                    extractedAmount = amount,
+                                    extractedMerchant = displayName,
+                                    rawTexts = rawTexts
+                                )
+                            )
+                            return@launch
+                        }
+                    } else {
+                        // 无商户名称时，以 30 秒窗口防抖排重
+                        val recentDupCount = db.recordDao().getRecentDuplicateCount(amount, type, now - 30_000L)
+                        if (recentDupCount > 0) {
+                            AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
+                            AutoRecordDiagnosticLogger.log(
+                                CaptureSnapshot(
+                                    pkg = pkg,
+                                    channel = channel,
+                                    status = "⛔ 拦截: 30秒内已存在相同金额记账 (金额:¥$amount)",
+                                    extractedAmount = amount,
+                                    extractedMerchant = displayName,
+                                    rawTexts = rawTexts
+                                )
+                            )
+                            return@launch
+                        }
                     }
                 }
 
-                // 7. 数据库底层熔断防重：检查数据库内近 10 分钟 (600秒) 是否存在相同金额相同类型的记账
-                val recentDupCount = db.recordDao().getRecentDuplicateCount(amount, type, now - 600_000L)
-                if (recentDupCount > 0) {
-                    AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
-                    AutoRecordDiagnosticLogger.log(
-                        CaptureSnapshot(
-                            pkg = pkg,
-                            channel = channel,
-                            status = "⛔ 拦截: 数据库近10分钟已存在相同金额记账 (金额:¥$amount)",
-                            extractedAmount = amount,
-                            extractedMerchant = displayName,
-                            rawTexts = rawTexts
-                        )
-                    )
-                    return@launch
+                // 7. 金额两位小数精度规整化（杜绝浮点数产生脏数据）
+                val standardizedAmount = Math.round(amount * 100.0) / 100.0
+
+                // 8. 动态匹配默认账本（杜绝写死 bookId = 1L 导致自定义多账本脱节）
+                val targetBookId = try {
+                    db.bookDao().getAllBooksList().firstOrNull { it.isDefault }?.id ?: 1L
+                } catch (_: Exception) {
+                    1L
                 }
+
+                // 9. 自动维护资产看板账户（若美团/京东/云闪付产生的账户在资产库不存在，自动建立，避免资产统计脱节）
+                try {
+                    val existingAcc = db.accountDao().getAccountByName(accountName)
+                    if (existingAcc == null) {
+                        db.accountDao().insertAccount(Account(name = accountName, balance = 0.0, currency = "CNY"))
+                    }
+                } catch (_: Exception) {}
 
                 val remarkText = if (!orderId.isNullOrBlank()) {
                     "$displayName [单号:$orderId]"
@@ -1121,9 +1146,9 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 val finalTimestamp = billTimestamp ?: now
 
                 val record = Record(
-                    bookId = 1L, // 统一记入日常主账本
+                    bookId = targetBookId,
                     type = type,
-                    amount = amount,
+                    amount = standardizedAmount,
                     categoryName = catName,
                     accountName = accountName,
                     remark = remarkText,

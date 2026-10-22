@@ -54,6 +54,9 @@ interface AccountDao {
     @Query("SELECT * FROM accounts ORDER BY id ASC")
     suspend fun getAllAccountsList(): List<Account>
 
+    @Query("SELECT * FROM accounts WHERE name = :name LIMIT 1")
+    suspend fun getAccountByName(name: String): Account?
+
     @Update
     suspend fun updateAccount(account: Account)
 

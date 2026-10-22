@@ -796,14 +796,15 @@ fun PeriodicScreen(
                                             if (plan.currentPeriod < plan.totalPeriods) {
                                                 OutlinedButton(
                                                     onClick = {
-                                                        viewModel.updateInstallmentPlan(plan.copy(currentPeriod = plan.currentPeriod + 1))
-                                                        Toast.makeText(context, "已推进至第 ${plan.currentPeriod + 1} 期还款", Toast.LENGTH_SHORT).show()
+                                                        viewModel.payInstallmentPeriod(plan) {
+                                                            Toast.makeText(context, "已成功记账第 ${plan.currentPeriod} 期还款 ¥${String.format(Locale.getDefault(), "%.2f", plan.monthlyAmount)}", Toast.LENGTH_SHORT).show()
+                                                        }
                                                     },
                                                     shape = RoundedCornerShape(8.dp),
                                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                                     modifier = Modifier.height(32.dp)
                                                 ) {
-                                                    Text("还完一期", fontSize = 12.sp)
+                                                    Text("还完一期并记账", fontSize = 12.sp)
                                                 }
                                             } else {
                                                 Text("已结清", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MintGreen)

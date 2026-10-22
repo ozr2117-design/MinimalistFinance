@@ -362,19 +362,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val amount = evaluateAmount()
             if (amount <= 0.0) return@launch
+            val standardizedAmount = Math.round(amount * 100.0) / 100.0
 
             val currentRemark = remarkText.value.trim()
             if (currentRemark.isNotEmpty()) {
                 recordRemarkToHistory(currentRemark)
             }
 
+            val targetAccount = selectedAccountName.value.ifBlank { "微信" }
+            try {
+                val existingAcc = accountDao.getAccountByName(targetAccount)
+                if (existingAcc == null) {
+                    accountDao.insertAccount(Account(name = targetAccount, balance = 0.0, currency = "CNY"))
+                }
+            } catch (_: Exception) {}
+
             val record = Record(
                 bookId = currentBookId.value,
                 type = currentTransactionType.value,
-                amount = amount,
+                amount = standardizedAmount,
                 categoryId = selectedCategoryId.value,
                 categoryName = selectedCategoryName.value,
-                accountName = selectedAccountName.value,
+                accountName = targetAccount,
                 remark = currentRemark,
                 tag = selectedTag.value,
                 timestamp = selectedTimestamp.value
@@ -431,6 +440,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearAllRecords(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             recordDao.clearAllRecords()
+            com.minimalist.finance.util.AutoRecordDedupeManager.clearAll(getApplication())
             onComplete()
         }
     }
@@ -520,6 +530,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateInstallmentPlan(plan: InstallmentPlan) {
         viewModelScope.launch {
             installmentPlanDao.updatePlan(plan)
+        }
+    }
+
+    // 推进一期分期并自动记入账本支出
+    fun payInstallmentPeriod(plan: InstallmentPlan, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val nextPeriod = plan.currentPeriod + 1
+            val isDone = nextPeriod >= plan.totalPeriods
+            val updatedPlan = plan.copy(
+                currentPeriod = minOf(nextPeriod, plan.totalPeriods),
+                isFinished = isDone
+            )
+            installmentPlanDao.updatePlan(updatedPlan)
+
+            // 自动同步向对应账本写入一笔真实分期还款流水
+            val standardizedAmount = Math.round(plan.monthlyAmount * 100.0) / 100.0
+            val record = Record(
+                bookId = plan.bookId,
+                type = TransactionType.EXPENSE,
+                amount = standardizedAmount,
+                categoryName = "分期还款",
+                accountName = plan.accountName,
+                remark = "${plan.name} (第${plan.currentPeriod}期还款/共${plan.totalPeriods}期)",
+                tag = "分期还款",
+                timestamp = System.currentTimeMillis()
+            )
+            recordDao.insertRecord(record)
+            onSuccess()
         }
     }
 
