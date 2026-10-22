@@ -19,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import com.minimalist.finance.MainActivity
 import com.minimalist.finance.R
 import com.minimalist.finance.data.AppDatabase
+import com.minimalist.finance.data.model.Account
 import com.minimalist.finance.data.model.Record
 import com.minimalist.finance.data.model.TransactionType
 import com.minimalist.finance.util.AutoRecordDedupeManager
