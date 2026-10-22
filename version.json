@@ -1,8 +1,8 @@
 {
-  "versionCode": 35,
-  "versionName": "1.3.4",
+  "versionCode": 36,
+  "versionName": "1.3.5",
   "releaseDate": "2026-10-22",
-  "changelog": "1. 通知栏视觉升级：常驻守护通知适配全新黑曜石天平全彩高清大图标（LargeIcon）与极简单色剪影小图标（SmallIcon），彻底解决通知栏显示旧版图标的问题\n2. 启动自愈刷新：应用启动时自动检测并强制刷新常驻保活通知，告别覆盖安装后需手动重置无障碍的繁琐步骤",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.4/shubu-v1.3.4.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.4/shubu-v1.3.4.apk"
+  "changelog": "1. 通知栏布局优化：移除通知卡片右侧重复冗余的大图标，解决小米澎湃OS/MIUI下左右双图标并存及标题被挤压换行的排版Bug\n2. 视觉排版舒展：通知左侧保持纯净应用图标，标题与描述文案单行自然延伸展示",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.5/shubu-v1.3.5.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.5/shubu-v1.3.5.apk"
 }
