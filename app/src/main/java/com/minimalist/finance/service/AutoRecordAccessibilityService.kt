@@ -106,15 +106,25 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                     PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
                 )
 
-                val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                    .setSmallIcon(R.mipmap.ic_launcher)
+                val largeIcon = try {
+                    android.graphics.BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
+                } catch (_: Exception) {
+                    null
+                }
+
+                val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_notification)
                     .setContentTitle("数簿已就绪 · 自动记账守护中")
                     .setContentText("实时监测微信/支付宝支付成功与停车账单凭证")
                     .setContentIntent(pendingIntent)
                     .setOngoing(true)
                     .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                    .build()
 
+                if (largeIcon != null) {
+                    notificationBuilder.setLargeIcon(largeIcon)
+                }
+
+                val notification = notificationBuilder.build()
                 nm.notify(NOTIFICATION_ID, notification)
             } catch (_: Exception) {}
         }

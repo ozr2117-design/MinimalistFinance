@@ -26,6 +26,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.minimalist.finance.util.AutoRecordDiagnosticLogger.init(applicationContext)
+        // 启动时自动同步刷新常驻守护通知（若开启），确保通知栏图标与状态即时同步
+        com.minimalist.finance.service.AutoRecordAccessibilityService.updateKeepAliveNotification(applicationContext)
         setContent {
             val themeMode by viewModel.currentThemeMode.collectAsState()
 
