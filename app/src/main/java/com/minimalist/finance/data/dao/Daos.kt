@@ -102,19 +102,19 @@ interface RecordDao {
     @Query("SELECT SUM(amount) FROM records WHERE bookId = :bookId AND type = 'INCOME'")
     fun getBookIncome(bookId: Long): Flow<Double?>
 
-    @Query("SELECT COUNT(*) FROM records WHERE amount = :amount AND type = :type AND timestamp >= :sinceTimestamp")
+    @Query("SELECT COUNT(*) FROM records WHERE ABS(amount - :amount) < 0.005 AND type = :type AND timestamp >= :sinceTimestamp")
     suspend fun getRecentDuplicateCount(amount: Double, type: TransactionType, sinceTimestamp: Long): Int
 
     @Query("SELECT COUNT(*) FROM records WHERE remark LIKE '%' || :orderId || '%'")
     suspend fun getRecordCountByOrderId(orderId: String): Int
 
-    @Query("SELECT COUNT(*) FROM records WHERE amount = :amount AND type = :type AND remark LIKE '%' || :merchant || '%' AND timestamp >= :sinceTimestamp")
+    @Query("SELECT COUNT(*) FROM records WHERE ABS(amount - :amount) < 0.005 AND type = :type AND remark LIKE '%' || :merchant || '%' AND timestamp >= :sinceTimestamp")
     suspend fun getSameMerchantRecordCount(amount: Double, type: TransactionType, merchant: String, sinceTimestamp: Long): Int
 
     @Query("SELECT COUNT(*) FROM records")
     suspend fun getTotalRecordCount(): Int
 
-    @Query("DELETE FROM records WHERE amount = :amount AND timestamp >= :sinceTimestamp")
+    @Query("DELETE FROM records WHERE ABS(amount - :amount) < 0.005 AND timestamp >= :sinceTimestamp")
     suspend fun deleteRecentRecordsByAmount(amount: Double, sinceTimestamp: Long): Int
 }
 

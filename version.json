@@ -1,8 +1,8 @@
 {
-  "versionCode": 38,
-  "versionName": "1.3.7",
-  "releaseDate": "2026-10-22",
-  "changelog": "1. 核心防重与状态机彻底重构：彻底废除粗暴的「全天同商户同金额误杀」与「10分钟全局同金额盲目熔断」，全面升级为基于单号终身确权 + 无单号 60 秒严格滑动窗口，彻底解决早晚坐地铁、同一便利店复购被当成重复拦截的硬伤\n2. 多账本与资产看板自愈联动：自动记账落库动态匹配当前默认主账本（告别写死 bookId），并自动同步创建美团/京东等缺失账户，杜绝资产统计脱节\n3. 分期还款真实入账：点击分期「还完一期」时，自动向账本生成真实支出流水，资产与账本大盘严丝合缝闭环",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.7/shubu-v1.3.7.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.7/shubu-v1.3.7.apk"
+  "versionCode": 39,
+  "versionName": "1.3.8",
+  "releaseDate": "2026-10-23",
+  "changelog": "1. 云闪付信用卡还款与内部转账全链路根治：引入支付平台主体字典与页面流转状态机（120秒上下文穿透防御），彻底杜绝云闪付还款完成页「云闪付App」被误判为日常消费支出\n2. 内部互转对冲与双向销账精度加固：修复底层数据库浮点数比对精度漏洞，增强通知栏与前台窗口毫秒级双向对冲闭环\n3. 系统关键字与商户提取净化：全面收录云闪付、银联、数字人民币等渠道主体名称，杜绝平台自身被提取为消费商户",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.8/shubu-v1.3.8.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.8/shubu-v1.3.8.apk"
 }

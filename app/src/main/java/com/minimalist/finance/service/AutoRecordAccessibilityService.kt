@@ -50,6 +50,12 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         var lastRecordLog: String = ""
         var lastRecordTime: Long = 0L
 
+        // 云闪付 (com.unionpay) 信用卡还款上下文状态机与防穿透追踪
+        @Volatile
+        var lastUnionPayRepaymentContextTime: Long = 0L
+        @Volatile
+        var lastUnionPayRepaymentAmount: Double = 0.0
+
         private const val CHANNEL_ID = "auto_record_service_channel"
         private const val NOTIFICATION_ID = 8888
 
@@ -342,8 +348,10 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             )
             // 若为云闪付入账通知，提取金额并向对冲引擎注册 INCOME 事件，用于抵消成对的还款转出
             if (pkg == "com.unionpay") {
+                lastUnionPayRepaymentContextTime = System.currentTimeMillis()
                 val hedgedAmount = extractAmountFromSingleText(combined)
                 if (hedgedAmount != null && hedgedAmount > 0.0) {
+                    lastUnionPayRepaymentAmount = hedgedAmount
                     val wasHedged = AutoRecordDedupeManager.checkAndRegisterHedge(pkg, TransactionType.INCOME, hedgedAmount, 90_000L)
                     if (wasHedged) {
                         val now = System.currentTimeMillis()
@@ -618,6 +626,19 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         if (texts.isEmpty()) return
 
         val joined = texts.joinToString(" ")
+
+        // 核心感知：实时感知云闪付信用卡还款与内部转账流转上下文
+        if (pkg == "com.unionpay") {
+            if (joined.contains("信用卡还款") || joined.contains("还款详情") || joined.contains("还信用卡") ||
+                joined.contains("还款金额") || joined.contains("已成功还款") || joined.contains("还款成功") ||
+                joined.contains("确认付款") || joined.contains("还款确认")) {
+                lastUnionPayRepaymentContextTime = System.currentTimeMillis()
+                val amt = extractAmountFromList(texts)
+                if (amt != null && amt > 0.0) {
+                    lastUnionPayRepaymentAmount = amt
+                }
+            }
+        }
 
         // 核心防误触 1：各应用主界面（首页/导航栏/功能大厅）坚决不触碰，彻底根除“点进云闪付/支付宝无操作被广告误记”
         if (isAppHomeNavigationScreen(pkg, texts, joined)) {
@@ -912,7 +933,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         val now = System.currentTimeMillis()
 
         // 0. 信用卡还款终极排他底线拦截
-        if (isCreditCardRepayment(pkg, partyName, listOf(rawContext), rawContext)) {
+        if (isCreditCardRepayment(pkg, partyName, rawTexts.ifEmpty { listOf(rawContext) }, rawContext)) {
             AutoRecordDiagnosticLogger.log(
                 CaptureSnapshot(
                     pkg = pkg,
@@ -1467,13 +1488,49 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
         // 4. 云闪付 (com.unionpay) 银行卡还款与跨行互转专属指纹拦截
         if (pkg == "com.unionpay") {
+            val now = System.currentTimeMillis()
+            // (0) 状态机上下文穿透防御：过去 120 秒内曾处于信用卡还款/转账上下文
+            val isInRepaymentContext = (now - lastUnionPayRepaymentContextTime < 120_000L)
+            if (isInRepaymentContext) {
+                return true
+            }
+
             // (1) 拦截一切云闪付入账通知（绝大多数为还款到账、跨行转账或信用卡溢缴入账，非商业经营收款）
             if (joined.contains("入账通知") || joined.contains("汇款入账") || joined.contains("银联入账") ||
                 Regex(""".*尾号为\d{4}的银行卡.*入账.*""").containsMatchIn(joined)) {
                 return true
             }
 
-            // (2) 拦截纯卡号转出通知 (无任何真实商户名字，仅有“尾号为xxxx的银行卡于...消费xx元”)
+            // (2) 平台渠道主体字典判定：商户名为云闪付自身/平台主体，且无任何外部真实消费商户
+            val unionPayPlatformNames = listOf("云闪付App", "云闪付", "银联", "中国银联", "银联在线支付")
+            val isPlatformMerchant = unionPayPlatformNames.any { partyName.contains(it) || partyName == it } ||
+                    partyName.isBlank() || isSystemWord(partyName)
+            if (isPlatformMerchant) {
+                // 检查页面是否存在任何外部真实店铺/商家特征词
+                val hasRealExternalMerchant = texts.any { t ->
+                    val trimmed = t.trim()
+                    trimmed.isNotEmpty() &&
+                    !unionPayPlatformNames.any { trimmed.contains(it) } &&
+                    !isSystemWord(trimmed) &&
+                    !trimmed.contains("支付成功") && !trimmed.contains("付款成功") &&
+                    !trimmed.contains("交易成功") && !trimmed.contains("完成") &&
+                    !trimmed.contains("付款方式") && !trimmed.contains("广告") &&
+                    !trimmed.contains("订单信息") && !trimmed.contains("查看详情") &&
+                    !trimmed.contains("储蓄卡") && !trimmed.contains("借记卡") &&
+                    !trimmed.contains("银行卡") && !trimmed.startsWith("¥") && !trimmed.startsWith("￥") &&
+                    !Regex("""^[\d\s]+$""").matches(trimmed) &&
+                    (trimmed.contains("店") || trimmed.contains("超市") || trimmed.contains("商户") ||
+                     trimmed.contains("公司") || trimmed.contains("生活") || trimmed.contains("商城") ||
+                     trimmed.contains("便利") || trimmed.contains("网店") || trimmed.contains("专卖") ||
+                     trimmed.contains("旗舰店") || trimmed.contains("服务区") || trimmed.contains("客运"))
+                }
+                // 若无外部真实商户，且页面呈现转出账户（储蓄卡/借记卡/银行卡/付款方式），判定为内部划转/还款
+                if (!hasRealExternalMerchant && (joined.contains("储蓄卡") || joined.contains("借记卡") || joined.contains("银行卡") || joined.contains("付款方式"))) {
+                    return true
+                }
+            }
+
+            // (3) 拦截纯卡号转出通知 (无任何真实商户名字，仅有“尾号为xxxx的银行卡于...消费xx元”)
             val hasCardPattern = Regex(""".*尾号为\d{4}的银行卡.*于.*分\s*消费.*""").containsMatchIn(joined) ||
                                  Regex(""".*尾号为\d{4}的银行卡.*付款成功.*""").containsMatchIn(joined)
             val hasRealMerchant = partyName.isNotBlank() &&
@@ -1482,9 +1539,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                                   !isSystemWord(partyName) &&
                                   (joined.contains("在【") || joined.contains("向【") || joined.contains("商户") || joined.contains("店"))
             if (hasCardPattern && !hasRealMerchant) {
-                if (joined.contains("信用卡") || joined.contains("还款") || joined.contains("转账") || joined.contains("对公")) {
-                    return true
-                }
+                return true
             }
         }
 
@@ -1736,11 +1791,12 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
         // 4. 常见业务系统关键字
         return cleaned in listOf(
-            "微信支付", "支付宝", "京东支付", "京东白条", "京东E卡", "E卡", "礼品卡", "购物卡",
+            "微信支付", "支付宝", "云闪付App", "云闪付", "中国银联", "银联在线支付", "银联", "数字人民币",
+            "京东支付", "京东白条", "京东E卡", "E卡", "礼品卡", "购物卡",
             "支付成功", "付款成功", "交易成功", "完成", "收款成功", "账单详情", "人民币",
             "零钱余额", "账户余额", "卡余额", "转账时间", "收款时间", "你已收款", "资金已存入零钱", "你已收款，资金已存入零钱",
-            "微信支付凭证", "付款凭证", "支付方式", "扣款成功", "交易明细", "查看账单", "查看详情",
-            "返回商家", "关闭", "确定", "返回", "商家小程序", "我的订单", "取餐号", "订单已完成",
+            "微信支付凭证", "付款凭证", "支付方式", "付款方式", "订单信息", "扣款成功", "交易明细", "查看账单", "查看详情",
+            "返回商家", "返回按钮", "关闭", "确定", "返回", "商家小程序", "我的订单", "取餐号", "订单已完成",
             "全部账单", "常见问题", "账单服务", "退款", "退款成功", "退款申请", "退款中", "退款明细", "退款结果",
             "日常", "日常消费", "消费", "交易", "交易类型", "交易摘要", "信用卡消费", "尾号", "银行卡", "信用卡还款", "还款"
         )
