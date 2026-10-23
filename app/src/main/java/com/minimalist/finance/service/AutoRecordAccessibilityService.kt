@@ -56,6 +56,12 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         @Volatile
         var lastUnionPayRepaymentAmount: Double = 0.0
 
+        // 收银台展示会话级防重状态（彻底杜绝用户在收银台停留跨分钟重复记账）
+        @Volatile
+        var lastCashierSessionKey: String = ""
+        @Volatile
+        var lastCashierSessionTimestamp: Long = 0L
+
         private const val CHANNEL_ID = "auto_record_service_channel"
         private const val NOTIFICATION_ID = 8888
 
@@ -258,6 +264,14 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         } catch (_: Exception) {}
 
         updateKeepAliveNotification(this)
+
+        // 自动自愈历史由于“订单金额”关键字漏洞误产生的脏记录
+        scope.launch {
+            try {
+                val db = AppDatabase.getDatabase(applicationContext, scope)
+                db.recordDao().deleteRecordsByMerchant("订单金额")
+            } catch (_: Exception) {}
+        }
     }
 
     override fun onDestroy() {
@@ -901,6 +915,28 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return
         }
 
+        // 核心防误触 3.5：收银台页面停留会话去重
+        // 当用户完成付款后停留在收银台弹窗（如淘宝/天猫/支付宝/微信支付结果页），界面持续存在支付成功与相同金额特征。
+        // 必须以会话级指纹（应用 + 金额）锁定 180 秒，坚决杜绝停留跨分钟重复记账！
+        val isCashierSuccessScreen = joined.contains("支付成功") || joined.contains("付款成功") || joined.contains("支付金额")
+        if (isCashierSuccessScreen) {
+            val sessionKey = "${pkg}_${targetType.name}_${String.format(Locale.US, "%.2f", amount)}"
+            val now = System.currentTimeMillis()
+            if (sessionKey == lastCashierSessionKey && (now - lastCashierSessionTimestamp < 180_000L)) {
+                AutoRecordDiagnosticLogger.log(
+                    CaptureSnapshot(
+                        pkg = pkg,
+                        channel = "界面窗口 (Window)",
+                        status = "⛔ 拦截: 处于同一收银台会话展示中 (180秒会话防抖)",
+                        extractedAmount = amount,
+                        extractedMerchant = partyName,
+                        rawTexts = texts
+                    )
+                )
+                return
+            }
+        }
+
         saveAutoRecord(
             pkg = pkg,
             amount = amount,
@@ -1003,7 +1039,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
         // 3. 【核心同步原子预占位 (Atomic Pre-Claim)】：
         // 彻底根除微信“通知栏推送 + 页面收银台”毫秒级极速并发导致的协程 TOCTOU 竞态漏洞！
-        // 在主线程同步块内原子性完成 60 秒内存防抖与指纹锁死，并发事件瞬间被阻断，杜绝产生多个协程！
+        // 在主线程同步块内原子性完成 180 秒内存防抖与指纹锁死，并发事件瞬间被阻断，杜绝产生多个协程！
         val claimed = AutoRecordDedupeManager.tryClaim(
             context = applicationContext,
             pkg = pkg,
@@ -1011,14 +1047,14 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             amount = amount,
             fingerprint = fingerprint,
             orderId = orderId,
-            windowMs = 60_000L
+            windowMs = 180_000L
         )
         if (!claimed) {
             AutoRecordDiagnosticLogger.log(
                 CaptureSnapshot(
                     pkg = pkg,
                     channel = channel,
-                    status = "⛔ 拦截: 命中原子预占位并发锁 (60秒内同应用同金额防抖)",
+                    status = "⛔ 拦截: 命中原子预占位并发锁 (180秒内同应用同金额防抖)",
                     extractedAmount = amount,
                     extractedMerchant = partyName,
                     rawTexts = rawTexts
@@ -1072,7 +1108,11 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             }
         }
 
-        val catName = classifyCategory("$displayName $rawContext", type)
+        val directCat = classifyCategory(displayName, type)
+        val catName = if (directCat != "其他") directCat else {
+            val candidateSummary = rawTexts.take(15).filter { !isSystemWord(it) && it.length in 2..20 }.joinToString(" ")
+            classifyCategory("$displayName $candidateSummary", type)
+        }
 
         scope.launch {
             try {
@@ -1097,9 +1137,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                     }
                 } else {
                     // 6. 无单号场景（如线下个人码/路边摊收款码/即时轻量凭证）的短周期防抖排重：
-                    // 仅在 60 秒内同一商户且同一金额才判定为页面重绘/前后台切换残留；
-                    // 彻底废除“当天同商户全天禁用”与“10分钟全局盲目熔断”的反人类误杀！
-                    val duplicateWindow = 60_000L // 60秒
+                    // 升级为 180 秒滑动窗口，同一商户且同一金额判定为同一支付事件会话残留
+                    val duplicateWindow = 180_000L // 180秒 (3分钟)
                     if (partyName.isNotBlank() && !isSystemWord(partyName)) {
                         val recentSameMerchantCount = db.recordDao().getSameMerchantRecordCount(
                             amount = amount,
@@ -1113,7 +1152,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                                 CaptureSnapshot(
                                     pkg = pkg,
                                     channel = channel,
-                                    status = "⛔ 拦截: 60秒内已存在相同商户同金额记账 (商户:$partyName, 金额:¥$amount)",
+                                    status = "⛔ 拦截: 180秒内已存在相同商户同金额记账 (商户:$partyName, 金额:¥$amount)",
                                     extractedAmount = amount,
                                     extractedMerchant = displayName,
                                     rawTexts = rawTexts
@@ -1122,15 +1161,15 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                             return@launch
                         }
                     } else {
-                        // 无商户名称时，以 30 秒窗口防抖排重
-                        val recentDupCount = db.recordDao().getRecentDuplicateCount(amount, type, now - 30_000L)
+                        // 无商户名称时，以 180 秒窗口防抖排重
+                        val recentDupCount = db.recordDao().getRecentDuplicateCount(amount, type, now - duplicateWindow)
                         if (recentDupCount > 0) {
                             AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
                             AutoRecordDiagnosticLogger.log(
                                 CaptureSnapshot(
                                     pkg = pkg,
                                     channel = channel,
-                                    status = "⛔ 拦截: 30秒内已存在相同金额记账 (金额:¥$amount)",
+                                    status = "⛔ 拦截: 180秒内已存在相同金额记账 (金额:¥$amount)",
                                     extractedAmount = amount,
                                     extractedMerchant = displayName,
                                     rawTexts = rawTexts
@@ -1199,6 +1238,13 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
                 lastRecordLog = "${if (type == TransactionType.INCOME) "收入 +" else "支出 -"}¥${String.format(java.util.Locale.CHINA, "%.2f", amount)} ($catName · $accountName · $displayName)"
                 lastRecordTime = now
+
+                // 标记收银台展示会话
+                val isCashierSuccessScreen = rawContext.contains("支付成功") || rawContext.contains("付款成功") || rawContext.contains("支付金额")
+                if (isCashierSuccessScreen) {
+                    lastCashierSessionKey = "${pkg}_${type.name}_${String.format(java.util.Locale.US, "%.2f", amount)}"
+                    lastCashierSessionTimestamp = now
+                }
 
                 mainHandler.post {
                     val prefix = if (type == TransactionType.INCOME) "收入 +" else "支出 -"
@@ -1748,7 +1794,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
     }
 
 
-    // 金额噪声排他：余额类、优惠红包类、卡类、返利类，坚决不可作为消费金额
+    // 金额噪声排他：余额类、优惠红包类、卡类、返利类、分期利息与分期期数类，坚决不可作为消费金额
     private fun isAmountNoise(text: String): Boolean {
         val lower = text.lowercase()
         return lower.contains("余额") || lower.contains("可用") || lower.contains("账户余额") ||
@@ -1758,7 +1804,12 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                lower.contains("满减") || lower.contains("抵扣") || lower.contains("京豆") ||
                lower.contains("淘金币") || lower.contains("积分") || lower.contains("返利") ||
                lower.contains("省¥") || lower.contains("省￥") || lower.contains("运费险") ||
-               lower.contains("原价") || lower.contains("划线价")
+               lower.contains("原价") || lower.contains("划线价") ||
+               lower.contains("利息") || lower.contains("/期") || lower.contains("每期") ||
+               lower.contains("分期") || lower.contains("期免息") || lower.contains("手续费") ||
+               lower.contains("服务费") || lower.contains("费率") ||
+               Regex(""".*[×x*]\s*\d+\s*期.*""").containsMatchIn(lower) ||
+               (Regex(""".*\d+\s*期.*""").containsMatchIn(lower) && !lower.contains("支付") && !lower.contains("付款"))
     }
 
     private fun isSystemWord(word: String): Boolean {
@@ -1794,8 +1845,11 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             "微信支付", "支付宝", "云闪付App", "云闪付", "中国银联", "银联在线支付", "银联", "数字人民币",
             "京东支付", "京东白条", "京东E卡", "E卡", "礼品卡", "购物卡",
             "支付成功", "付款成功", "交易成功", "完成", "收款成功", "账单详情", "人民币",
+            "订单金额", "支付金额", "付款金额", "实付金额", "交易金额", "应付金额", "成交金额",
+            "实付款", "优惠金额", "抵扣金额", "立减金额", "立减金", "绿色能量",
+            "订单信息", "查看全部", "已选中", "未选中", "信贷分期", "分期付款", "分期免息",
             "零钱余额", "账户余额", "卡余额", "转账时间", "收款时间", "你已收款", "资金已存入零钱", "你已收款，资金已存入零钱",
-            "微信支付凭证", "付款凭证", "支付方式", "付款方式", "订单信息", "扣款成功", "交易明细", "查看账单", "查看详情",
+            "微信支付凭证", "付款凭证", "支付方式", "付款方式", "扣款成功", "交易明细", "查看账单", "查看详情",
             "返回商家", "返回按钮", "关闭", "确定", "返回", "商家小程序", "我的订单", "取餐号", "订单已完成",
             "全部账单", "常见问题", "账单服务", "退款", "退款成功", "退款申请", "退款中", "退款明细", "退款结果",
             "日常", "日常消费", "消费", "交易", "交易类型", "交易摘要", "信用卡消费", "尾号", "银行卡", "信用卡还款", "还款"
@@ -1866,9 +1920,12 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
     // ====== 增强金额提取算法 ======
     private fun extractAmountFromList(texts: List<String>): Double? {
-        // 0. 最高优先级：收银台与电商明确结算标签（实付款/实付/实付金额/实际支付/应付金额/总计/合计）
+        // 0. 最高优先级：收银台与电商明确结算标签（支付金额/实付款/实付/实付金额/实际支付/付款金额/扣款金额/总计/合计）
         // 杜绝抓取商品原价、划线价、抵扣券或优惠金额
-        val finalAmountLabels = listOf("实付款", "实付金额", "实际支付", "实付", "应付金额", "总计", "合计")
+        val finalAmountLabels = listOf(
+            "支付金额", "实付款", "付款金额", "实付金额", "实际支付", "实付",
+            "扣款金额", "成交金额", "成功支付", "已付金额", "已付款", "应付金额", "总计", "合计"
+        )
         for (i in texts.indices) {
             val t = texts[i].trim()
             for (label in finalAmountLabels) {

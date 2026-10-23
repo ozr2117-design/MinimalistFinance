@@ -249,13 +249,16 @@ object AutoRecordDedupeManager {
         val amountStr = String.format(Locale.US, "%.2f", amount)
         val cleanMerchant = merchant.trim()
         val timeKey = if (billTimestamp != null && billTimestamp > 0L) {
-            // 精确到分钟 (yyyyMMddHHmm)
+            // 真实历史账单（包含具体年-月-日 时:分），永久去重
             val sdf = SimpleDateFormat("yyyyMMddHHmm", Locale.CHINA)
             sdf.format(Date(billTimestamp))
         } else {
-            // 即时消费默认取当前时间精确到分钟 (yyyyMMddHHmm)，杜绝天级指纹导致全天同一商户无法二次记账的重大硬伤
-            val sdf = SimpleDateFormat("yyyyMMddHHmm", Locale.CHINA)
-            sdf.format(Date())
+            // 即时消费无单号时，取当前 5 分钟时间块（floor to 5-min bucket），彻底消除跨 60 秒/1 分钟边界失效的致命缺陷！
+            val calendar = java.util.Calendar.getInstance()
+            val minute = calendar.get(java.util.Calendar.MINUTE)
+            val fiveMinBucket = minute / 5
+            val dayStr = SimpleDateFormat("yyyyMMddHH", Locale.CHINA).format(calendar.time)
+            "${dayStr}_b$fiveMinBucket"
         }
         return "${pkg}_${type.name}_${amountStr}_${cleanMerchant}_$timeKey"
     }

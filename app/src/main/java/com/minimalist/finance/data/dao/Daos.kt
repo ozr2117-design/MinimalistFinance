@@ -116,6 +116,9 @@ interface RecordDao {
 
     @Query("DELETE FROM records WHERE ABS(amount - :amount) < 0.005 AND timestamp >= :sinceTimestamp")
     suspend fun deleteRecentRecordsByAmount(amount: Double, sinceTimestamp: Long): Int
+
+    @Query("DELETE FROM records WHERE remark = :merchant OR remark LIKE :merchant || ' [%'")
+    suspend fun deleteRecordsByMerchant(merchant: String): Int
 }
 
 
