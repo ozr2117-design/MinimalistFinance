@@ -244,7 +244,8 @@ object AutoRecordDedupeManager {
         type: TransactionType,
         amount: Double,
         merchant: String,
-        billTimestamp: Long?
+        billTimestamp: Long?,
+        sessionToken: String? = null
     ): String {
         val amountStr = String.format(Locale.US, "%.2f", amount)
         val cleanMerchant = merchant.trim()
@@ -252,8 +253,11 @@ object AutoRecordDedupeManager {
             // 真实历史账单（包含具体年-月-日 时:分），永久去重
             val sdf = SimpleDateFormat("yyyyMMddHHmm", Locale.CHINA)
             sdf.format(Date(billTimestamp))
+        } else if (!sessionToken.isNullOrBlank()) {
+            // 绑定前置支付动作 Token，单次付款动作终身唯一防重
+            sessionToken
         } else {
-            // 即时消费无单号时，取当前 5 分钟时间块（floor to 5-min bucket），彻底消除跨 60 秒/1 分钟边界失效的致命缺陷！
+            // 即时消费无单号兜底，取当前 5 分钟时间块（floor to 5-min bucket）
             val calendar = java.util.Calendar.getInstance()
             val minute = calendar.get(java.util.Calendar.MINUTE)
             val fiveMinBucket = minute / 5

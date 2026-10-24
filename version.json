@@ -1,8 +1,8 @@
 {
-  "versionCode": 40,
-  "versionName": "1.3.9",
-  "releaseDate": "2026-10-23",
-  "changelog": "1. 电商与收银台实付金额优先：新增「支付金额/实付款」顶级提取权重，彻底解决立减金与折扣导致的原价（如 ¥435）倒置误记问题\n2. 分期与利息噪声强效过滤：严密过滤「/期」、「×3期」、「利息」等期数费率噪声，彻底根除分期手续费（如 ¥2.65）被误当独立支出记账的缺陷\n3. 收银台会话级去重与时间指纹单调化：建立收银台展示会话记忆（180秒会话锁）与 5 分钟时间块指纹，彻底消灭付款后停留收银台跨分钟重复记账\n4. 系统商户名净化与自愈：将「订单金额/支付金额/立减金」全面纳入系统保留词，杜绝作为商户名入库，启动时自动清理历史「订单金额」脏记录",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.9/shubu-v1.3.9.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.3.9/shubu-v1.3.9.apk"
+  "versionCode": 41,
+  "versionName": "1.4.0",
+  "releaseDate": "2026-10-24",
+  "changelog": "1. 前置支付动作状态机（Payment Initiation State Machine）：严格绑定付款码、扫一扫、密码/指纹核验单次有效 Token，彻底杜绝付款后手机锁屏或切后台、十多分钟后唤醒残留支付完成页导致的二次重复入库\n2. 收银台会话生命周期与单调时钟防重：收银台停留期间未检测到全新支付动作时永久互斥拦截，并将无单号商户排重窗口扩增至 30 分钟强防护\n3. 历史重复账单自愈引擎：应用启动或服务连接时自动扫描并清理 30 分钟内因收银台残留被误重复记录的同商户同金额脏记录",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.0/shubu-v1.4.0.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.0/shubu-v1.4.0.apk"
 }

@@ -119,6 +119,9 @@ interface RecordDao {
 
     @Query("DELETE FROM records WHERE remark = :merchant OR remark LIKE :merchant || ' [%'")
     suspend fun deleteRecordsByMerchant(merchant: String): Int
+
+    @Query("DELETE FROM records WHERE id IN (SELECT r2.id FROM records r1 JOIN records r2 ON r1.type = r2.type AND ABS(r1.amount - r2.amount) < 0.005 AND r1.remark = r2.remark AND r2.id > r1.id AND (r2.timestamp - r1.timestamp) >= 0 AND (r2.timestamp - r1.timestamp) <= 1800000 AND r1.remark NOT LIKE '%单号:%')")
+    suspend fun deleteRecentDuplicateInstantRecords(): Int
 }
 
 

@@ -4,6 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.minimalist.finance.data.AppDatabase
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +32,15 @@ class MainActivity : ComponentActivity() {
         com.minimalist.finance.util.AutoRecordDiagnosticLogger.init(applicationContext)
         // 启动时自动同步刷新常驻守护通知（若开启），确保通知栏图标与状态即时同步
         com.minimalist.finance.service.AutoRecordAccessibilityService.updateKeepAliveNotification(applicationContext)
+
+        // 自动自愈清理历史因收银台唤醒残留产生的重复记账与系统词脏记录
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val db = AppDatabase.getDatabase(applicationContext, this)
+                db.recordDao().deleteRecentDuplicateInstantRecords()
+                db.recordDao().deleteRecordsByMerchant("订单金额")
+            } catch (_: Exception) {}
+        }
         setContent {
             val themeMode by viewModel.currentThemeMode.collectAsState()
 

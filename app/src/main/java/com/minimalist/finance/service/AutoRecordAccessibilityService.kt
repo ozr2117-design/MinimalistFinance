@@ -25,6 +25,7 @@ import com.minimalist.finance.data.model.TransactionType
 import com.minimalist.finance.util.AutoRecordDedupeManager
 import com.minimalist.finance.util.AutoRecordDiagnosticLogger
 import com.minimalist.finance.util.CaptureSnapshot
+import com.minimalist.finance.util.PaymentInitiationTracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -266,11 +267,21 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
         updateKeepAliveNotification(this)
 
-        // 自动自愈历史由于“订单金额”关键字漏洞误产生的脏记录
+        // 自动自愈历史由于收银台唤醒残留产生的重复记账，以及“订单金额”脏记录
         scope.launch {
             try {
                 val db = AppDatabase.getDatabase(applicationContext, scope)
                 db.recordDao().deleteRecordsByMerchant("订单金额")
+                val deletedDupCount = db.recordDao().deleteRecentDuplicateInstantRecords()
+                if (deletedDupCount > 0) {
+                    AutoRecordDiagnosticLogger.log(
+                        CaptureSnapshot(
+                            pkg = "com.minimalist.finance",
+                            channel = "系统自愈",
+                            status = "✅ 自动清理 $deletedDupCount 条因收银台唤醒残留产生的重复记账"
+                        )
+                    )
+                }
             } catch (_: Exception) {}
         }
     }
@@ -579,6 +590,9 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
         val detectedAccount = extractAccountFromTexts(pkg, listOf(combined))
         val orderId = extractOrderIdFromSingleText(combined)
+        PaymentInitiationTracker.markInitiated(pkg)
+        val notifToken = PaymentInitiationTracker.getCurrentToken(pkg)
+        PaymentInitiationTracker.validateAndConsume(pkg)
         saveAutoRecord(
             pkg = pkg,
             amount = amount,
@@ -588,7 +602,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             customAccount = detectedAccount,
             orderId = orderId,
             rawTexts = listOf(combined),
-            channel = "通知栏 (Notification)"
+            channel = "通知栏 (Notification)",
+            sessionToken = notifToken
         )
     }
 
@@ -641,6 +656,11 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         if (texts.isEmpty()) return
 
         val joined = texts.joinToString(" ")
+
+        // 核心状态机：实时感知前置支付动作意图（出示付款码/扫一扫/密码/指纹/确认支付）
+        if (isPaymentInitiationScreen(pkg, texts, joined)) {
+            PaymentInitiationTracker.markInitiated(pkg)
+        }
 
         // 核心感知：实时感知云闪付信用卡还款与内部转账流转上下文
         if (pkg == "com.unionpay") {
@@ -916,25 +936,47 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return
         }
 
-        // 核心防误触 3.5：收银台页面停留会话去重
-        // 当用户完成付款后停留在收银台弹窗（如淘宝/天猫/支付宝/微信支付结果页），界面持续存在支付成功与相同金额特征。
-        // 必须以会话级指纹（应用 + 金额）锁定 180 秒，坚决杜绝停留跨分钟重复记账！
+        // 核心防误触 3.5：收银台页面停留会话去重与前置支付动作强校验
+        // 当用户完成付款后停留在收银台弹窗（如微信/支付宝支付成功页），界面持续存在支付成功与相同金额特征。
+        // 若没有唯一的第三方交易单号（即时收银台完成页），必须核验是否发生过真实的前置支付动作！
         val isCashierSuccessScreen = joined.contains("支付成功") || joined.contains("付款成功") || joined.contains("支付金额")
-        if (isCashierSuccessScreen) {
-            val sessionKey = "${pkg}_${targetType.name}_${String.format(Locale.US, "%.2f", amount)}"
-            val now = System.currentTimeMillis()
-            if (sessionKey == lastCashierSessionKey && (now - lastCashierSessionTimestamp < 180_000L)) {
+        var cashierToken: String? = null
+        if (isCashierSuccessScreen && targetType == TransactionType.EXPENSE) {
+            val sessionKey = "${pkg}_${targetType.name}_${String.format(java.util.Locale.US, "%.2f", amount)}"
+            val hasNewInitiation = PaymentInitiationTracker.hasFreshUnconsumedInitiation(pkg)
+
+            // 拦截 1：如果处于同一收银台展示会话且没有发生新的前置支付动作，绝对拦截残留！
+            if (sessionKey == lastCashierSessionKey && !hasNewInitiation) {
                 AutoRecordDiagnosticLogger.log(
                     CaptureSnapshot(
                         pkg = pkg,
                         channel = "界面窗口 (Window)",
-                        status = "⛔ 拦截: 处于同一收银台会话展示中 (180秒会话防抖)",
+                        status = "⛔ 拦截: 处于同一收银台残留展示会话 (无新支付动作)",
                         extractedAmount = amount,
                         extractedMerchant = partyName,
                         rawTexts = texts
                     )
                 )
                 return
+            }
+
+            // 拦截 2：对于无单号即时收银台页，严格核验前置支付动作 Token
+            if (orderId == null) {
+                val (isValid, tokenOrReason) = PaymentInitiationTracker.validateAndConsume(pkg)
+                if (!isValid) {
+                    AutoRecordDiagnosticLogger.log(
+                        CaptureSnapshot(
+                            pkg = pkg,
+                            channel = "界面窗口 (Window)",
+                            status = "⛔ 拦截: 处于已记录收银台残留页面 ($tokenOrReason)",
+                            extractedAmount = amount,
+                            extractedMerchant = partyName,
+                            rawTexts = texts
+                        )
+                    )
+                    return
+                }
+                cashierToken = tokenOrReason
             }
         }
 
@@ -948,7 +990,8 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             orderId = orderId,
             billTimestamp = billTimestamp,
             rawTexts = texts,
-            channel = "界面窗口 (Window)"
+            channel = "界面窗口 (Window)",
+            sessionToken = cashierToken
         )
     }
 
@@ -965,12 +1008,14 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         orderId: String? = null,
         billTimestamp: Long? = null,
         rawTexts: List<String> = emptyList(),
-        channel: String = "界面窗口 (Window)"
+        channel: String = "界面窗口 (Window)",
+        sessionToken: String? = null
     ) {
         val now = System.currentTimeMillis()
 
         // 0. 信用卡还款终极排他底线拦截
         if (isCreditCardRepayment(pkg, partyName, rawTexts.ifEmpty { listOf(rawContext) }, rawContext)) {
+            PaymentInitiationTracker.releaseToken(pkg, sessionToken)
             AutoRecordDiagnosticLogger.log(
                 CaptureSnapshot(
                     pkg = pkg,
@@ -988,6 +1033,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         // 90秒内同一应用发生完全相同金额的一出一进（如还款时卡A扣2060.89，卡B入2060.89）
         val isHedged = AutoRecordDedupeManager.checkAndRegisterHedge(pkg, type, amount, 90_000L)
         if (isHedged) {
+            PaymentInitiationTracker.releaseToken(pkg, sessionToken)
             AutoRecordDiagnosticLogger.log(
                 CaptureSnapshot(
                     pkg = pkg,
@@ -1009,6 +1055,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
 
         // 1. 唯一订单号持久化拦截：只要微信/支付宝单号曾记过账，绝对直接拦截（终身防重）
         if (!orderId.isNullOrBlank() && AutoRecordDedupeManager.isOrderRecorded(applicationContext, orderId)) {
+            PaymentInitiationTracker.releaseToken(pkg, sessionToken)
             AutoRecordDiagnosticLogger.log(
                 CaptureSnapshot(
                     pkg = pkg,
@@ -1022,9 +1069,10 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             return
         }
 
-        // 2. 交易特征指纹持久化拦截 (金额 + 商户 + 时间指纹)
-        val fingerprint = AutoRecordDedupeManager.buildFingerprint(pkg, type, amount, partyName, billTimestamp)
+        // 2. 交易特征指纹持久化拦截 (金额 + 商户 + 时间指纹 / Token)
+        val fingerprint = AutoRecordDedupeManager.buildFingerprint(pkg, type, amount, partyName, billTimestamp, sessionToken)
         if (AutoRecordDedupeManager.isFingerprintRecorded(applicationContext, fingerprint)) {
+            PaymentInitiationTracker.releaseToken(pkg, sessionToken)
             AutoRecordDiagnosticLogger.log(
                 CaptureSnapshot(
                     pkg = pkg,
@@ -1051,6 +1099,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
             windowMs = 180_000L
         )
         if (!claimed) {
+            PaymentInitiationTracker.releaseToken(pkg, sessionToken)
             AutoRecordDiagnosticLogger.log(
                 CaptureSnapshot(
                     pkg = pkg,
@@ -1072,6 +1121,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         )
         val maxBillAge = if (isShopping) 600_000L else 180_000L
         if (billTimestamp != null && now - billTimestamp > maxBillAge) {
+            PaymentInitiationTracker.releaseToken(pkg, sessionToken)
             AutoRecordDedupeManager.releaseClaim(pkg, type, amount, fingerprint, orderId)
             AutoRecordDiagnosticLogger.log(
                 CaptureSnapshot(
@@ -1137,9 +1187,9 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                         return@launch
                     }
                 } else {
-                    // 6. 无单号场景（如线下个人码/路边摊收款码/即时轻量凭证）的短周期防抖排重：
-                    // 升级为 180 秒滑动窗口，同一商户且同一金额判定为同一支付事件会话残留
-                    val duplicateWindow = 180_000L // 180秒 (3分钟)
+                    // 6. 无单号场景（如线下个人码/微信支付成功页/即时轻量凭证）的短周期防抖排重：
+                    // 升级为 30 分钟 (1800秒) 强防护窗口！若非带有新鲜前置支付动作，绝对判定为残留唤醒拦截
+                    val duplicateWindow = 1800_000L // 30分钟
                     if (partyName.isNotBlank() && !isSystemWord(partyName)) {
                         val recentSameMerchantCount = db.recordDao().getSameMerchantRecordCount(
                             amount = amount,
@@ -1147,13 +1197,14 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                             merchant = partyName,
                             sinceTimestamp = now - duplicateWindow
                         )
-                        if (recentSameMerchantCount > 0) {
+                        val hasRecentAction = PaymentInitiationTracker.hasRecentInitiation(pkg, 30_000L)
+                        if (recentSameMerchantCount > 0 && !hasRecentAction) {
                             AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
                             AutoRecordDiagnosticLogger.log(
                                 CaptureSnapshot(
                                     pkg = pkg,
                                     channel = channel,
-                                    status = "⛔ 拦截: 180秒内已存在相同商户同金额记账 (商户:$partyName, 金额:¥$amount)",
+                                    status = "⛔ 拦截: 30分钟内已存在相同商户同金额记账且无即时前置支付动作 (商户:$partyName, 金额:¥$amount)",
                                     extractedAmount = amount,
                                     extractedMerchant = displayName,
                                     rawTexts = rawTexts
@@ -1162,15 +1213,15 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                             return@launch
                         }
                     } else {
-                        // 无商户名称时，以 180 秒窗口防抖排重
-                        val recentDupCount = db.recordDao().getRecentDuplicateCount(amount, type, now - duplicateWindow)
+                        // 无商户名称时，以 300 秒 (5分钟) 窗口防抖排重
+                        val recentDupCount = db.recordDao().getRecentDuplicateCount(amount, type, now - 300_000L)
                         if (recentDupCount > 0) {
                             AutoRecordDedupeManager.markRecorded(applicationContext, orderId, fingerprint)
                             AutoRecordDiagnosticLogger.log(
                                 CaptureSnapshot(
                                     pkg = pkg,
                                     channel = channel,
-                                    status = "⛔ 拦截: 180秒内已存在相同金额记账 (金额:¥$amount)",
+                                    status = "⛔ 拦截: 5分钟内已存在相同金额记账 (金额:¥$amount)",
                                     extractedAmount = amount,
                                     extractedMerchant = displayName,
                                     rawTexts = rawTexts
@@ -1257,8 +1308,61 @@ class AutoRecordAccessibilityService : AccessibilityService() {
                 }
             } catch (e: Exception) {
                 // 发生未捕获异常时释放占位，允许用户重试
+                PaymentInitiationTracker.releaseToken(pkg, sessionToken)
                 AutoRecordDedupeManager.releaseClaim(pkg, type, amount, fingerprint, orderId)
             }
+        }
+    }
+
+    /**
+     * 感知真实前置支付动作意图（出示付款码、扫一扫、密码/指纹核验、确认付款、提交订单）
+     */
+    private fun isPaymentInitiationScreen(pkg: String, texts: List<String>, joined: String): Boolean {
+        // 排除应用主页导航栏
+        if (isAppHomeNavigationScreen(pkg, texts, joined)) return false
+
+        // 排除历史账单/聊天页面
+        if (isBrowsingHistoryOrChatting(pkg, texts, joined)) return false
+
+        return when (pkg) {
+            "com.tencent.mm" -> {
+                joined.contains("付款条码") || joined.contains("轻触可查看付款码数字") ||
+                joined.contains("付款二维码") || joined.contains("向商家出示") ||
+                joined.contains("向商家付款") || joined.contains("优先付款方式") ||
+                (joined.contains("收付款") && joined.contains("付款码")) ||
+                joined.contains("输入支付密码") || joined.contains("请输入支付密码") ||
+                joined.contains("确认支付") || joined.contains("使用指纹") ||
+                joined.contains("验证指纹") || joined.contains("面容验证") ||
+                joined.contains("正在支付") || joined.contains("放入框内") ||
+                joined.contains("扫码支付")
+            }
+            "com.eg.android.AlipayGphone" -> {
+                joined.contains("向商家付钱") || joined.contains("向商家付款") ||
+                joined.contains("立即付款") || joined.contains("确认付款") ||
+                joined.contains("输入支付密码") || joined.contains("指纹支付") ||
+                joined.contains("验证指纹") || joined.contains("正在付款") ||
+                (joined.contains("付款码") && !joined.contains("首页")) ||
+                joined.contains("扫码支付") || joined.contains("放入框内")
+            }
+            "com.unionpay" -> {
+                joined.contains("向商家付钱") || joined.contains("确认付款") ||
+                joined.contains("立即支付") || joined.contains("输入密码") ||
+                (joined.contains("付款码") && !joined.contains("首页"))
+            }
+            in listOf("com.taobao.taobao", "com.taobao.litetao", "com.tmall.wireless", "com.taobao.idlefish") -> {
+                joined.contains("提交订单") || joined.contains("立即付款") ||
+                joined.contains("确认付款") || joined.contains("立即支付") ||
+                joined.contains("去支付") || (joined.contains("支付金额") && joined.contains("分期"))
+            }
+            in listOf("com.sankuai.meituan", "com.sankuai.meituan.takeoutnew", "me.ele") -> {
+                joined.contains("提交订单") || joined.contains("去支付") ||
+                joined.contains("立即支付") || joined.contains("确认支付")
+            }
+            "com.jingdong.app.mall" -> {
+                joined.contains("提交订单") || joined.contains("去支付") ||
+                joined.contains("立即支付") || joined.contains("微信支付") || joined.contains("京东支付")
+            }
+            else -> false
         }
     }
 
