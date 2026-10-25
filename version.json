@@ -1,8 +1,8 @@
 {
-  "versionCode": 42,
-  "versionName": "1.4.1",
+  "versionCode": 43,
+  "versionName": "1.4.2",
   "releaseDate": "2026-10-25",
-  "changelog": "1. 官方账单智能导入引擎：完美兼容微信支付、支付宝（GBK编码智能转码）、云闪付官方导出的 CSV/表格文件\n2. 表头与元数据智能跳过：自动剥离微信与支付宝前缀汇总说明行，精准识别交易数据正文\n3. 官方交易单号绝对去重：基于 28-32 位全局唯一单号与时间戳签名双重查重，重复导入 100 次也零重复\n4. 中性与退款流水智能过滤：自动剔除不计收支、信用卡还款、零钱提现及退款成功流水，保持账本纯净准确",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.1/shubu-v1.4.1.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.1/shubu-v1.4.1.apk"
+  "changelog": "1. 移除侧边抽屉中的「自动记账」菜单入口，全面聚焦极速手动记账与官方账单表格导入体验\n2. 优化后台通知行为：未连接无障碍服务时静默取消常驻保活通知，保持状态栏清爽无干扰\n3. 持续巩固微信、支付宝与云闪付官方账单 CSV 智能解析与物理级单号去重导入稳定性",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.2/shubu-v1.4.2.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.2/shubu-v1.4.2.apk"
 }

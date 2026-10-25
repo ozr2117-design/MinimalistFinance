@@ -93,7 +93,7 @@ class AutoRecordAccessibilityService : AccessibilityService() {
         }
 
         fun updateKeepAliveNotification(context: Context) {
-            if (!isKeepAliveEnabled(context)) {
+            if (!isServiceRunning || !isKeepAliveEnabled(context) || !isEnabled(context)) {
                 cancelKeepAliveNotification(context)
                 return
             }

@@ -27,7 +27,7 @@ fun DrawerMenu(
     onNavigateToDashboard: () -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToPeriodic: () -> Unit,
-    onNavigateToAutoRecord: () -> Unit,
+    onNavigateToAutoRecord: () -> Unit = {},
     onNavigateToBackup: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onCloseDrawer: () -> Unit,
@@ -129,16 +129,6 @@ fun DrawerMenu(
                 onClick = {
                     onCloseDrawer()
                     onNavigateToPeriodic()
-                }
-            )
-
-            DrawerMenuItem(
-                icon = Icons.Default.Bolt,
-                title = "自动记账",
-                textColor = textColor,
-                onClick = {
-                    onCloseDrawer()
-                    onNavigateToAutoRecord()
                 }
             )
 
