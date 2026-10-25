@@ -5,6 +5,7 @@ import android.net.Uri
 import android.widget.Toast
 import java.io.File
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,10 +21,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.minimalist.finance.R
 import com.minimalist.finance.ui.component.AppUpdateDialog
 import com.minimalist.finance.ui.theme.*
 import com.minimalist.finance.util.AppUpdateInfo
@@ -86,20 +89,13 @@ fun AboutScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Spacer(modifier = Modifier.height(10.dp))
-                    Box(
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_app_logo),
+                        contentDescription = "数簿",
                         modifier = Modifier
                             .size(80.dp)
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(Color(0xFF8B1E1E)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "數",
-                            color = Color(0xFFFFD700),
-                            fontSize = 44.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                            .clip(RoundedCornerShape(20.dp))
+                    )
                     Spacer(modifier = Modifier.height(14.dp))
                     Text(text = "数簿", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textColor)
                     val currentVersionName = remember { AppUpdateManager.getAppVersionName(context) }

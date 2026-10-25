@@ -1,8 +1,8 @@
 {
-  "versionCode": 43,
-  "versionName": "1.4.2",
+  "versionCode": 44,
+  "versionName": "1.4.3",
   "releaseDate": "2026-10-25",
-  "changelog": "1. 移除侧边抽屉中的「自动记账」菜单入口，全面聚焦极速手动记账与官方账单表格导入体验\n2. 优化后台通知行为：未连接无障碍服务时静默取消常驻保活通知，保持状态栏清爽无干扰\n3. 持续巩固微信、支付宝与云闪付官方账单 CSV 智能解析与物理级单号去重导入稳定性",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.2/shubu-v1.4.2.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.2/shubu-v1.4.2.apk"
+  "changelog": "1. 全面统一应用内品牌视觉：将侧边抽屉与「关于」界面的传统旧红印图标替换为统一色系的「黑曜石天平」高质感应用图标\n2. 高清视网膜适配：内置超清应用徽标资源，呈现细腻现代的极简黑金美学\n3. 持续巩固微信、支付宝与云闪付官方账单 CSV 智能解析与物理级单号去重导入稳定性",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.3/shubu-v1.4.3.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.3/shubu-v1.4.3.apk"
 }

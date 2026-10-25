@@ -1,5 +1,6 @@
 package com.minimalist.finance.ui.screen
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -14,9 +15,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.minimalist.finance.R
 import com.minimalist.finance.ui.theme.*
 import com.minimalist.finance.ui.viewmodel.MainViewModel
 
@@ -53,25 +56,18 @@ fun DrawerMenu(
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
-            // 用户头部卡片 (传统数簿印章)
+            // 用户头部卡片 (黑曜石天平应用图标)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Box(
+                Image(
+                    painter = painterResource(id = R.drawable.ic_app_logo),
+                    contentDescription = "数簿",
                     modifier = Modifier
                         .size(52.dp)
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF8B1E1E)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "數",
-                        color = Color(0xFFFFD700),
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                )
 
                 Column {
                     Text(
