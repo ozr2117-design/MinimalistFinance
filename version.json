@@ -1,8 +1,8 @@
 {
-  "versionCode": 41,
-  "versionName": "1.4.0",
-  "releaseDate": "2026-10-24",
-  "changelog": "1. 前置支付动作状态机（Payment Initiation State Machine）：严格绑定付款码、扫一扫、密码/指纹核验单次有效 Token，彻底杜绝付款后手机锁屏或切后台、十多分钟后唤醒残留支付完成页导致的二次重复入库\n2. 收银台会话生命周期与单调时钟防重：收银台停留期间未检测到全新支付动作时永久互斥拦截，并将无单号商户排重窗口扩增至 30 分钟强防护\n3. 历史重复账单自愈引擎：应用启动或服务连接时自动扫描并清理 30 分钟内因收银台残留被误重复记录的同商户同金额脏记录",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.0/shubu-v1.4.0.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.0/shubu-v1.4.0.apk"
+  "versionCode": 42,
+  "versionName": "1.4.1",
+  "releaseDate": "2026-10-25",
+  "changelog": "1. 官方账单智能导入引擎：完美兼容微信支付、支付宝（GBK编码智能转码）、云闪付官方导出的 CSV/表格文件\n2. 表头与元数据智能跳过：自动剥离微信与支付宝前缀汇总说明行，精准识别交易数据正文\n3. 官方交易单号绝对去重：基于 28-32 位全局唯一单号与时间戳签名双重查重，重复导入 100 次也零重复\n4. 中性与退款流水智能过滤：自动剔除不计收支、信用卡还款、零钱提现及退款成功流水，保持账本纯净准确",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.1/shubu-v1.4.1.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.1/shubu-v1.4.1.apk"
 }

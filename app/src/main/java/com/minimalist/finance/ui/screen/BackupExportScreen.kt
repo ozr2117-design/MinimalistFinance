@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.minimalist.finance.ui.theme.*
 import com.minimalist.finance.ui.viewmodel.MainViewModel
+import com.minimalist.finance.util.BillImportEngine
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -45,6 +46,8 @@ fun BackupExportScreen(
     // 导入确认状态
     var showImportConfirmDialog by remember { mutableStateOf(false) }
     var importedJsonData by remember { mutableStateOf<String?>(null) }
+    var importBillResult by remember { mutableStateOf<BillImportEngine.ImportResult?>(null) }
+    var isImportingBill by remember { mutableStateOf(false) }
 
     // SAF 导出 JSON 文件选择器
     val exportJsonLauncher = rememberLauncherForActivityResult(
@@ -101,22 +104,15 @@ fun BackupExportScreen(
         }
     }
 
-    // SAF 导入 CSV 文件选择器
+    // SAF 导入 CSV/官方账单 文件选择器
     val importCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
-            try {
-                val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                if (!text.isNullOrBlank()) {
-                    viewModel.importRecordsCsv(text) { success, msg ->
-                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                    }
-                } else {
-                    Toast.makeText(context, "选取的文件内容为空！", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                Toast.makeText(context, "读取 CSV 失败: ${e.message}", Toast.LENGTH_LONG).show()
+            isImportingBill = true
+            viewModel.importBillFromUri(context, uri) { result ->
+                isImportingBill = false
+                importBillResult = result
             }
         }
     }
@@ -256,10 +252,10 @@ fun BackupExportScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(text = "📊", fontSize = 18.sp)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(text = "账单明细表格 · CSV 导出与导入", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                            Text(text = "微信 / 支付宝 / 云闪付 · 官方账单智能导入", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
                         }
                         Text(
-                            text = "通用 CSV 表格格式，支持在电脑 Excel 中双击直接查看分析，亦可将其他表格格式账单批量导入到「数簿」中。",
+                            text = "完美兼容微信、支付宝（GBK自动转码）、云闪付官方导出的账单 CSV/表格。自带单号绝对去重（导入 100 次也零重复），自动过滤中性提现与退款流水。",
                             fontSize = 13.sp,
                             color = textSecondary,
                             lineHeight = 18.sp
@@ -290,15 +286,32 @@ fun BackupExportScreen(
                                 Text("导出流水表格")
                             }
 
-                            // 导入 CSV
-                            OutlinedButton(
+                            // 导入官方账单 / CSV
+                            Button(
                                 onClick = {
-                                    importCsvLauncher.launch(arrayOf("text/comma-separated-values", "text/csv", "text/plain", "*/*"))
+                                    importCsvLauncher.launch(arrayOf(
+                                        "text/comma-separated-values",
+                                        "text/csv",
+                                        "text/plain",
+                                        "application/vnd.ms-excel",
+                                        "*/*"
+                                    ))
                                 },
+                                enabled = !isImportingBill,
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("导入流水表格")
+                                if (isImportingBill) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("解析中...")
+                                } else {
+                                    Text("导入官方账单")
+                                }
                             }
                         }
                     }
@@ -414,6 +427,76 @@ fun BackupExportScreen(
                     ) {
                         Text("取消")
                     }
+                }
+            }
+        )
+    }
+
+    // 账单导入结果详情弹窗
+    val billResult = importBillResult
+    if (billResult != null) {
+        val formatName = billResult.format.displayName
+
+        AlertDialog(
+            onDismissRequest = { importBillResult = null },
+            icon = {
+                Icon(
+                    imageVector = if (billResult.success) Icons.Default.CheckCircle else Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = if (billResult.success) MintGreen else CoralRed,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (billResult.success) "账单导入完成" else "账单导入失败",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = if (billResult.success) "已识别格式：$formatName" else billResult.message,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp
+                    )
+                    if (billResult.success) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("总扫描流水行数", fontSize = 13.sp, color = textSecondary)
+                            Text("${billResult.totalCount} 笔", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("✅ 成功新增入库", fontSize = 13.sp, color = MintGreen)
+                            Text("${billResult.importedCount} 笔", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MintGreen)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("🔄 忽略已存在重复单号", fontSize = 13.sp, color = textSecondary)
+                            Text("${billResult.duplicateCount} 笔", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("🚫 过滤中性/退款/不计收支", fontSize = 13.sp, color = textSecondary)
+                            Text("${billResult.filteredCount} 笔", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        if (billResult.failedCount > 0) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("⚠️ 格式异常跳过", fontSize = 13.sp, color = CoralRed)
+                                Text("${billResult.failedCount} 笔", fontSize = 13.sp)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "💡 提示：数簿已基于单号进行物理级幂等校验，重复导入相同账单文件绝不会导致重复记账。",
+                            fontSize = 11.sp,
+                            color = textSecondary,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { importBillResult = null }) {
+                    Text("完成")
                 }
             }
         )

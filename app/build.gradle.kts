@@ -13,8 +13,8 @@ android {
         applicationId = "com.minimalist.finance"
         minSdk = 26
         targetSdk = 35
-        versionCode = 41
-        versionName = "1.4.0"
+        versionCode = 42
+        versionName = "1.4.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -1,12 +1,14 @@
 package com.minimalist.finance.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.minimalist.finance.data.AppDatabase
 import com.minimalist.finance.data.model.*
 import com.minimalist.finance.ui.theme.ThemeMode
+import com.minimalist.finance.util.BillImportEngine
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -728,6 +730,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 onResult(false, "备份解析失败: ${e.message ?: "格式错误"}")
             }
+        }
+    }
+
+    fun importBillFromUri(context: android.content.Context, uri: Uri, onResult: (BillImportEngine.ImportResult) -> Unit) {
+        viewModelScope.launch {
+            val result = BillImportEngine.importFromUri(
+                context = context,
+                uri = uri,
+                targetBookId = currentBookId.value
+            )
+            onResult(result)
         }
     }
 
