@@ -1,8 +1,8 @@
 {
-  "versionCode": 45,
-  "versionName": "1.4.4",
+  "versionCode": 46,
+  "versionName": "1.4.5",
   "releaseDate": "2026-11-01",
-  "changelog": "1. 优化周期与分期管理界面排版：修复长标题文本被右侧开关遮挡压住的问题，引入自适应权重与单行省略打点\n2. 优化操作布局：规范状态开关与删除按钮间距，保障小屏幕及长文本下的交互体验",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.4/shubu-v1.4.4.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.4/shubu-v1.4.4.apk"
+  "changelog": "1. 周期与分期卡片排版全面重构：标题独占顶行展示空间，支持多行完整呈现，彻底根除字数截断与遮挡\n2. 交互层级优化：金额大字突出并与状态开关同行展示，界面主次更分明\n3. 全面支持随时编辑：点击任意卡片即可进入编辑表单，自动回填历史配置并支持保存修改\n4. 新增安全删除功能：编辑页底部提供带二次确认的安全删除，防止列表误触",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.5/shubu-v1.4.5.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.5/shubu-v1.4.5.apk"
 }

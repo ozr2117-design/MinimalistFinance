@@ -3,6 +3,7 @@ package com.minimalist.finance.ui.screen
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -45,612 +46,66 @@ fun PeriodicScreen(
     val cardBg = if (isDark) DarkSurfaceCard else LightSurfaceCard
 
     var selectedTab by remember { mutableIntStateOf(0) } // 0: 分期管理, 1: 周期记账
-    var isAdding by remember { mutableStateOf(false) }
+    var isFormOpen by remember { mutableStateOf(false) }
+    var editingPeriodicRule by remember { mutableStateOf<PeriodicRule?>(null) }
+    var editingInstallmentPlan by remember { mutableStateOf<InstallmentPlan?>(null) }
 
     val periodicRules by viewModel.periodicRules.collectAsState()
     val installmentPlans by viewModel.installmentPlans.collectAsState()
     val books by viewModel.allBooks.collectAsState()
     val accounts by viewModel.allAccounts.collectAsState()
 
-    if (isAdding) {
-        // ====== 表单页 (信用卡分期 / 周期记账完整重构) ======
-        var startDate by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
-        var dayOfMonth by remember { mutableIntStateOf(10) } // 每月扣款日 (如 10 日)
-        var frequency by remember { mutableStateOf("每月") }
-        var endType by remember { mutableStateOf(if (selectedTab == 0) "按期数还清后自动结束" else "永不结束") }
-        var isPeriodicExpense by remember { mutableStateOf(true) } // 周期：支出 vs 收入
-
-        var selectedBookId by remember { mutableLongStateOf(books.firstOrNull { it.isDefault }?.id ?: books.firstOrNull()?.id ?: 1L) }
-        var selectedBookName by remember { mutableStateOf(books.firstOrNull { it.id == selectedBookId }?.name ?: "日常消费账本") }
-
-        var selectedAccountName by remember { mutableStateOf(accounts.firstOrNull()?.name ?: "微信") }
-        var selectedCat by remember { mutableStateOf(if (selectedTab == 0) "分期还款" else "日常支出") }
-
-        var amountText by remember { mutableStateOf("") }
-        var timeOfDay by remember { mutableStateOf("10:00") }
-        var remark by remember { mutableStateOf("") }
-        var periodsCount by remember { mutableStateOf("12") } // 仅分期
-
-        // 弹窗状态
-        var showBookPicker by remember { mutableStateOf(false) }
-        var showAccountPicker by remember { mutableStateOf(false) }
-        var showDayOfMonthPicker by remember { mutableStateOf(false) }
-        var showEndTypePicker by remember { mutableStateOf(false) }
-        var showFrequencyPicker by remember { mutableStateOf(false) }
-
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
-            topBar = {
-                Row(
-                    modifier = Modifier
-                        .statusBarsPadding()
-                        .padding(top = 10.dp)
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { isAdding = false }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = textColor)
-                    }
-                    Text(
-                        text = if (selectedTab == 0) "添加信用卡 / 花呗分期" else "添加周期记账",
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = textColor
-                    )
-                }
-            },
-            bottomBar = {
-                // 底部保存条 (预览 + 保存)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    IconButton(
-                        onClick = {
-                            val parsedAmt = amountText.toDoubleOrNull() ?: 0.0
-                            val parsedP = periodsCount.toIntOrNull() ?: 12
-                            if (parsedAmt <= 0.0) {
-                                Toast.makeText(context, "请先输入金额再预览", Toast.LENGTH_SHORT).show()
-                            } else if (selectedTab == 0) {
-                                val monthly = parsedAmt / parsedP
-                                Toast.makeText(context, "预览：每期应还 ¥ ${String.format(Locale.getDefault(), "%.2f", monthly)}，每月 ${dayOfMonth} 日扣款", Toast.LENGTH_LONG).show()
-                            } else {
-                                Toast.makeText(context, "预览：每期 ¥ $parsedAmt ($frequency)，扣款日 $startDate", Toast.LENGTH_LONG).show()
-                            }
-                        },
-                        modifier = Modifier
-                            .size(52.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(BlueAccent)
-                    ) {
-                        Icon(Icons.Default.Visibility, contentDescription = "预览", tint = Color.White)
-                    }
-
-                    Button(
-                        onClick = {
-                            val amount = amountText.toDoubleOrNull() ?: 0.0
-                            if (amount <= 0.0) {
-                                Toast.makeText(context, "请输入有效的账单金额", Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-                            if (selectedTab == 0) {
-                                // 保存信用卡/花呗分期计划
-                                val totalP = periodsCount.toIntOrNull() ?: 12
-                                val monthly = amount / totalP
-                                viewModel.addInstallmentPlan(
-                                    InstallmentPlan(
-                                        name = if (remark.isNotBlank()) remark.trim() else "${selectedAccountName}分期",
-                                        totalAmount = amount,
-                                        totalPeriods = totalP,
-                                        currentPeriod = 1,
-                                        monthlyAmount = monthly,
-                                        bookId = selectedBookId,
-                                        accountName = selectedAccountName,
-                                        dayOfMonth = dayOfMonth
-                                    )
-                                )
-                                Toast.makeText(context, "已成功添加分期计划！", Toast.LENGTH_SHORT).show()
-                            } else {
-                                // 保存固定周期规则
-                                val freqText = if (frequency == "每月") "每月 ${dayOfMonth} 日" else frequency
-                                viewModel.addPeriodicRule(
-                                    PeriodicRule(
-                                        name = if (remark.isNotBlank()) remark.trim() else (if (isPeriodicExpense) "固定支出" else "固定收入"),
-                                        type = if (isPeriodicExpense) TransactionType.EXPENSE else TransactionType.INCOME,
-                                        amount = amount,
-                                        bookId = selectedBookId,
-                                        categoryName = selectedCat,
-                                        accountName = selectedAccountName,
-                                        startDate = startDate,
-                                        frequency = freqText,
-                                        endType = endType,
-                                        timeOfDay = timeOfDay
-                                    )
-                                )
-                                Toast.makeText(context, "已成功添加周期规则！", Toast.LENGTH_SHORT).show()
-                            }
-                            isAdding = false
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = BlueAccent),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = Color.White)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("保存计划", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        ) { innerPad ->
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPad)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                // 周期记账模式下的收支切换
-                if (selectedTab == 1) {
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(cardBg)
-                                .padding(4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isPeriodicExpense) CoralRed else Color.Transparent)
-                                    .clickable { isPeriodicExpense = true }
-                                    .padding(vertical = 9.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "支出 (房租/水电等)",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isPeriodicExpense) Color.White else textSecondary
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (!isPeriodicExpense) MintGreen else Color.Transparent)
-                                    .clickable { isPeriodicExpense = false }
-                                    .padding(vertical = 9.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "收入 (工资/收租等)",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (!isPeriodicExpense) Color.White else textSecondary
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 金额输入
-                item {
-                    OutlinedTextField(
-                        value = amountText,
-                        onValueChange = { amountText = it },
-                        label = { Text(if (selectedTab == 0) "分期总金额 (¥)" else "周期金额 (¥)") },
-                        placeholder = { Text("0.00") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                // 分期专属：期数快捷选择与试算卡片
-                if (selectedTab == 0) {
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(text = "分期总期数", fontSize = 13.sp, color = textSecondary)
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("3", "6", "12", "24", "36").forEach { p ->
-                                    val isSelected = periodsCount == p
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(if (isSelected) BlueAccent else cardBg)
-                                            .clickable { periodsCount = p }
-                                            .padding(vertical = 8.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = "${p}期",
-                                            fontSize = 13.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (isSelected) Color.White else textColor
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // 实时分期还款试算卡片
-                    item {
-                        val parsedAmt = amountText.toDoubleOrNull() ?: 0.0
-                        val parsedP = periodsCount.toIntOrNull() ?: 12
-                        if (parsedAmt > 0 && parsedP > 0) {
-                            val monthlyEst = parsedAmt / parsedP
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(BlueAccent.copy(alpha = 0.12f))
-                                    .padding(14.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text(text = "每期应还款 (自动试算)", fontSize = 12.sp, color = textSecondary)
-                                        Text(
-                                            text = "¥ ${String.format(Locale.getDefault(), "%.2f", monthlyEst)} / 期",
-                                            fontSize = 18.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = BlueAccent
-                                        )
-                                    }
-                                    Text(
-                                        text = "每月 ${dayOfMonth} 日扣款",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = BlueAccent
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 每月扣款日 (账单日) - 信用卡/花呗最核心逻辑！
-                item {
-                    FormRow(label = "每月扣款日 (还款日)", value = "每月 ${dayOfMonth} 日", isDark = isDark) {
-                        showDayOfMonthPicker = true
-                    }
-                }
-
-                // 开始执行日期
-                item {
-                    FormRow(label = if (selectedTab == 0) "首期还款日期" else "开始日期", value = startDate, isDark = isDark) {
-                        val c = Calendar.getInstance()
-                        DatePickerDialog(context, { _, y, m, d ->
-                            startDate = String.format(Locale.getDefault(), "%04d-%02d-%02d", y, m + 1, d)
-                        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
-                    }
-                }
-
-                // 扣款具体时间 (时:分)
-                item {
-                    FormRow(label = "扣款时间点", value = timeOfDay, isDark = isDark) {
-                        val parts = timeOfDay.split(":")
-                        val curH = parts.getOrNull(0)?.toIntOrNull() ?: 10
-                        val curM = parts.getOrNull(1)?.toIntOrNull() ?: 0
-                        TimePickerDialog(context, { _, h, m ->
-                            timeOfDay = String.format(Locale.getDefault(), "%02d:%02d", h, m)
-                        }, curH, curM, true).show()
-                    }
-                }
-
-                // 重复周期 (仅周期记账模式需要独立选周期)
-                if (selectedTab == 1) {
-                    item {
-                        FormRow(label = "重复周期", value = frequency, isDark = isDark) {
-                            showFrequencyPicker = true
-                        }
-                    }
-                }
-
-                // 结束方式 (下拉/菜单弹窗)
-                item {
-                    FormRow(label = "结束方式", value = endType, isDark = isDark) {
-                        showEndTypePicker = true
-                    }
-                }
-
-                // 账本 (下拉选择真实账本)
-                item {
-                    FormRow(label = "入账账本", value = selectedBookName, isDark = isDark) {
-                        showBookPicker = true
-                    }
-                }
-
-                // 扣款/入账账户 (下拉选择真实账户)
-                item {
-                    FormRow(label = if (selectedTab == 0 || isPeriodicExpense) "扣款账户" else "入账账户", value = selectedAccountName, isDark = isDark) {
-                        showAccountPicker = true
-                    }
-                }
-
-                // 备注
-                item {
-                    OutlinedTextField(
-                        value = remark,
-                        onValueChange = { remark = it },
-                        label = { Text(if (selectedTab == 0) "分期备注 (如：MacBook、花呗手机分期)" else "规则备注 (如：房租、公司工资)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(20.dp))
-                }
-            }
-        }
-
-        // ====== 账本选择弹窗 ======
-        if (showBookPicker) {
-            AlertDialog(
-                onDismissRequest = { showBookPicker = false },
-                title = { Text(text = "选择入账账本", fontWeight = FontWeight.Bold) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        books.forEach { b ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        selectedBookId = b.id
-                                        selectedBookName = b.name
-                                        showBookPicker = false
-                                    }
-                                    .padding(vertical = 12.dp, horizontal = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Book, contentDescription = null, tint = BlueAccent, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(text = b.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = textColor)
-                                        if (b.isDefault) {
-                                            Text(text = "默认账本", fontSize = 11.sp, color = textSecondary)
-                                        }
-                                    }
-                                }
-                                if (b.id == selectedBookId) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = BlueAccent)
-                                }
-                            }
-                        }
-                    }
+    if (isFormOpen) {
+        // ====== 表单页 (支持添加与编辑) ======
+        key(editingPeriodicRule?.id, editingInstallmentPlan?.id, selectedTab) {
+            PeriodicFormScreen(
+                selectedTab = selectedTab,
+                editingRule = editingPeriodicRule,
+                editingPlan = editingInstallmentPlan,
+                books = books,
+                accounts = accounts,
+                isDark = isDark,
+                onBack = {
+                    isFormOpen = false
+                    editingPeriodicRule = null
+                    editingInstallmentPlan = null
                 },
-                confirmButton = {}
-            )
-        }
-
-        // ====== 扣款账户选择弹窗 ======
-        if (showAccountPicker) {
-            AlertDialog(
-                onDismissRequest = { showAccountPicker = false },
-                title = { Text(text = if (selectedTab == 0 || isPeriodicExpense) "选择扣款账户" else "选择入账账户", fontWeight = FontWeight.Bold) },
-                text = {
-                    LazyColumn(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(accounts) { acc ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        selectedAccountName = acc.name
-                                        showAccountPicker = false
-                                    }
-                                    .padding(vertical = 12.dp, horizontal = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = if (acc.name.contains("微信")) Icons.Default.ChatBubble else if (acc.name.contains("支付宝")) Icons.Default.Payment else Icons.Default.CreditCard,
-                                        contentDescription = null,
-                                        tint = if (acc.name.contains("微信")) MintGreen else if (acc.name.contains("支付宝")) BlueAccent else CoralRed,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(text = acc.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = textColor)
-                                        Text(text = "当前余额: ¥ ${String.format(Locale.getDefault(), "%.2f", acc.balance)}", fontSize = 11.sp, color = textSecondary)
-                                    }
-                                }
-                                if (acc.name == selectedAccountName) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = BlueAccent)
-                                }
-                            }
-                        }
+                onSaveRule = { rule ->
+                    if (editingPeriodicRule != null) {
+                        viewModel.updatePeriodicRule(rule)
+                        Toast.makeText(context, "周期规则已更新", Toast.LENGTH_SHORT).show()
+                    } else {
+                        viewModel.addPeriodicRule(rule)
+                        Toast.makeText(context, "已成功添加周期规则！", Toast.LENGTH_SHORT).show()
                     }
+                    isFormOpen = false
+                    editingPeriodicRule = null
                 },
-                confirmButton = {}
-            )
-        }
-
-        // ====== 每月扣款日 (1 ~ 31日) 选择弹窗 ======
-        if (showDayOfMonthPicker) {
-            AlertDialog(
-                onDismissRequest = { showDayOfMonthPicker = false },
-                title = { Text(text = "选择每月扣款日 / 账单日", fontWeight = FontWeight.Bold) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(text = "常用日期快捷选：", fontSize = 13.sp, color = textSecondary)
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            listOf(5, 8, 9, 10, 15, 20, 25).forEach { d ->
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (dayOfMonth == d) BlueAccent else (if (isDark) DarkSurface else LightBorder))
-                                        .clickable {
-                                            dayOfMonth = d
-                                            showDayOfMonthPicker = false
-                                        }
-                                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                                ) {
-                                    Text(
-                                        text = "${d}日",
-                                        fontSize = 12.sp,
-                                        fontWeight = if (dayOfMonth == d) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (dayOfMonth == d) Color.White else textColor
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = "全部 1 ~ 31 日：", fontSize = 13.sp, color = textSecondary)
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(7),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.height(200.dp)
-                        ) {
-                            items(31) { idx ->
-                                val day = idx + 1
-                                Box(
-                                    modifier = Modifier
-                                        .aspectRatio(1f)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (dayOfMonth == day) BlueAccent else (if (isDark) DarkSurface else LightBorder))
-                                        .clickable {
-                                            dayOfMonth = day
-                                            showDayOfMonthPicker = false
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "$day",
-                                        fontSize = 13.sp,
-                                        fontWeight = if (dayOfMonth == day) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (dayOfMonth == day) Color.White else textColor
-                                    )
-                                }
-                            }
-                        }
+                onSavePlan = { plan ->
+                    if (editingInstallmentPlan != null) {
+                        viewModel.updateInstallmentPlan(plan)
+                        Toast.makeText(context, "分期计划已更新", Toast.LENGTH_SHORT).show()
+                    } else {
+                        viewModel.addInstallmentPlan(plan)
+                        Toast.makeText(context, "已成功添加分期计划！", Toast.LENGTH_SHORT).show()
                     }
+                    isFormOpen = false
+                    editingInstallmentPlan = null
                 },
-                confirmButton = {}
+                onDeleteRule = { rule ->
+                    viewModel.deletePeriodicRule(rule)
+                    Toast.makeText(context, "周期规则已删除", Toast.LENGTH_SHORT).show()
+                    isFormOpen = false
+                    editingPeriodicRule = null
+                },
+                onDeletePlan = { plan ->
+                    viewModel.deleteInstallmentPlan(plan)
+                    Toast.makeText(context, "分期计划已删除", Toast.LENGTH_SHORT).show()
+                    isFormOpen = false
+                    editingInstallmentPlan = null
+                }
             )
         }
-
-        // ====== 结束方式选择弹窗 ======
-        if (showEndTypePicker) {
-            val endOptions = if (selectedTab == 0) {
-                listOf(
-                    "按期数还清后自动结束" to "还满设定的总期数后自动完结并停止扣款",
-                    "截至指定日期结束" to "到达指定的截止日期后自动停止",
-                    "永不结束 / 长期循环" to "持续每月自动入账，直到手动停止"
-                )
-            } else {
-                listOf(
-                    "永不结束" to "长期按规律自动记账，适用于房租、工资等",
-                    "执行固定次数后结束" to "按指定次数执行满后结束 (默认12次)",
-                    "截至指定日期结束" to "到达指定截止日期后停止入账"
-                )
-            }
-
-            AlertDialog(
-                onDismissRequest = { showEndTypePicker = false },
-                title = { Text(text = "选择结束方式", fontWeight = FontWeight.Bold) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        endOptions.forEach { (opt, desc) ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        if (opt == "截至指定日期结束") {
-                                            val c = Calendar.getInstance()
-                                            DatePickerDialog(context, { _, y, m, d ->
-                                                endType = String.format(Locale.getDefault(), "截至 %04d-%02d-%02d 结束", y, m + 1, d)
-                                                showEndTypePicker = false
-                                            }, c.get(Calendar.YEAR) + 1, c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
-                                        } else {
-                                            endType = opt
-                                            showEndTypePicker = false
-                                        }
-                                    }
-                                    .padding(vertical = 10.dp, horizontal = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(text = opt, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = textColor)
-                                    Text(text = desc, fontSize = 12.sp, color = textSecondary)
-                                }
-                                if (endType.startsWith(opt.take(4))) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = BlueAccent)
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {}
-            )
-        }
-
-        // ====== 重复周期选择弹窗 (仅周期记账) ======
-        if (showFrequencyPicker) {
-            val freqOptions = listOf(
-                "每月" to "每月固定扣款日自动记账 (最常用)",
-                "每周" to "每周固定星期几自动记账",
-                "每工作日" to "周一至周五自动记账",
-                "每天" to "每天固定时间自动记账",
-                "每年" to "每年固定月份与日期自动记账"
-            )
-
-            AlertDialog(
-                onDismissRequest = { showFrequencyPicker = false },
-                title = { Text(text = "选择重复周期", fontWeight = FontWeight.Bold) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        freqOptions.forEach { (f, desc) ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        frequency = f
-                                        showFrequencyPicker = false
-                                    }
-                                    .padding(vertical = 10.dp, horizontal = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(text = f, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = textColor)
-                                    Text(text = desc, fontSize = 12.sp, color = textSecondary)
-                                }
-                                if (frequency == f) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = BlueAccent)
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {}
-            )
-        }
-
     } else {
         // ====== 列表页 (分期管理 / 周期记账) ======
         Scaffold(
@@ -701,7 +156,11 @@ fun PeriodicScreen(
             bottomBar = {
                 // 底部添加按钮
                 Button(
-                    onClick = { isAdding = true },
+                    onClick = {
+                        editingPeriodicRule = null
+                        editingInstallmentPlan = null
+                        isFormOpen = true
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = BlueAccent),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
@@ -727,7 +186,7 @@ fun PeriodicScreen(
                             InstructionText(num = "1", text = "分期功能专门用于管理信用卡、花呗等分期还款场景，设定好每期金额后会自动为您入账；", textSecondary = textSecondary)
                             InstructionText(num = "2", text = "还款入账类型为支出，扣款账户将实时扣减相应金额；", textSecondary = textSecondary)
                             InstructionText(num = "3", text = "清晰追踪还款进度，每期扣款一目了然，防范逾期风险；", textSecondary = textSecondary)
-                            InstructionText(num = "4", text = "随时可点击删除或查看还款进度。", textSecondary = textSecondary)
+                            InstructionText(num = "4", text = "点击卡片可随时修改分期总额与扣款日，或删除分期计划。", textSecondary = textSecondary)
                         }
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -737,9 +196,15 @@ fun PeriodicScreen(
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(16.dp))
                                         .background(cardBg)
+                                        .clickable {
+                                            editingInstallmentPlan = plan
+                                            editingPeriodicRule = null
+                                            isFormOpen = true
+                                        }
                                         .padding(16.dp)
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        // 顶行：标题独占整行，最右侧提示点击修改
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -758,13 +223,12 @@ fun PeriodicScreen(
                                                     fontSize = 16.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = textColor,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    lineHeight = 22.sp
                                                 )
                                             }
-                                            IconButton(onClick = { viewModel.deleteInstallmentPlan(plan) }, modifier = Modifier.size(28.dp)) {
-                                                Icon(Icons.Default.DeleteOutline, contentDescription = "删除", tint = textSecondary, modifier = Modifier.size(20.dp))
-                                            }
+                                            Text(text = "编辑", fontSize = 12.sp, color = BlueAccent)
                                         }
 
                                         LinearProgressIndicator(
@@ -781,7 +245,11 @@ fun PeriodicScreen(
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
                                             Text(text = "进度: ${plan.currentPeriod}/${plan.totalPeriods} 期", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = BlueAccent)
-                                            Text(text = "总额: ¥ ${plan.totalAmount}", fontSize = 13.sp, color = textSecondary)
+                                            Text(
+                                                text = "总额: ¥ ${if (plan.totalAmount % 1.0 == 0.0) plan.totalAmount.toLong().toString() else plan.totalAmount.toString()}",
+                                                fontSize = 13.sp,
+                                                color = textSecondary
+                                            )
                                         }
 
                                         HorizontalDivider(color = if (isDark) DarkBorder else LightBorder)
@@ -834,7 +302,7 @@ fun PeriodicScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             InstructionText(num = "1", text = "周期记账功能，用于管理房租、宽带、月薪等固定规律发生的收支；", textSecondary = textSecondary)
                             InstructionText(num = "2", text = "设定好重复频率与扣款日后，每个周期自动为您记账入库；", textSecondary = textSecondary)
-                            InstructionText(num = "3", text = "支持支出与收入双向周期管理，随时可以暂停或删除。", textSecondary = textSecondary)
+                            InstructionText(num = "3", text = "支持支出与收入双向周期管理，随时可以开启、暂停或点击卡片修改与删除。", textSecondary = textSecondary)
                         }
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -844,76 +312,94 @@ fun PeriodicScreen(
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(16.dp))
                                         .background(cardBg)
+                                        .clickable {
+                                            editingPeriodicRule = rule
+                                            editingInstallmentPlan = null
+                                            isFormOpen = true
+                                        }
                                         .padding(16.dp)
                                 ) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        // 顶行：支出/收入胶囊标签 + 完整标题 (独占整行宽度，最多2行，无右侧干扰)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.Top
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(top = 2.dp)
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(if (rule.type == TransactionType.EXPENSE) CoralRed.copy(alpha = 0.15f) else MintGreen.copy(alpha = 0.15f))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (rule.type == TransactionType.EXPENSE) "支出" else "收入",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (rule.type == TransactionType.EXPENSE) CoralRed else MintGreen
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = rule.name,
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = textColor,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                lineHeight = 22.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+
+                                        // 中行：金额大字突出 + 右侧状态开关
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
+                                            Text(
+                                                text = "¥ ${if (rule.amount % 1.0 == 0.0) rule.amount.toLong().toString() else rule.amount.toString()}",
+                                                fontSize = 20.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (rule.type == TransactionType.EXPENSE) CoralRed else MintGreen
+                                            )
+
                                             Row(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .padding(end = 8.dp),
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(if (rule.type == TransactionType.EXPENSE) CoralRed.copy(alpha = 0.15f) else MintGreen.copy(alpha = 0.15f))
-                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                ) {
-                                                    Text(
-                                                        text = if (rule.type == TransactionType.EXPENSE) "支出" else "收入",
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = if (rule.type == TransactionType.EXPENSE) CoralRed else MintGreen
-                                                    )
-                                                }
-                                                Spacer(modifier = Modifier.width(8.dp))
                                                 Text(
-                                                    text = rule.name,
-                                                    fontSize = 16.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = textColor,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
+                                                    text = if (rule.isEnabled) "已开启" else "已暂停",
+                                                    fontSize = 12.sp,
+                                                    color = if (rule.isEnabled) BlueAccent else textSecondary
                                                 )
-                                            }
-
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Spacer(modifier = Modifier.width(6.dp))
                                                 Switch(
                                                     checked = rule.isEnabled,
                                                     onCheckedChange = { checked ->
                                                         viewModel.updatePeriodicRule(rule.copy(isEnabled = checked))
                                                     }
                                                 )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                IconButton(onClick = { viewModel.deletePeriodicRule(rule) }, modifier = Modifier.size(28.dp)) {
-                                                    Icon(Icons.Default.DeleteOutline, contentDescription = "删除", tint = textSecondary, modifier = Modifier.size(20.dp))
-                                                }
                                             }
                                         }
 
+                                        // 底行：周期频率、时间、账户与分类
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(text = "周期: ${rule.frequency} (${rule.timeOfDay})", fontSize = 13.sp, color = textSecondary)
                                             Text(
-                                                text = "¥ ${rule.amount}",
-                                                fontSize = 15.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (rule.type == TransactionType.EXPENSE) CoralRed else MintGreen
+                                                text = "周期: ${rule.frequency} (${rule.timeOfDay})",
+                                                fontSize = 12.sp,
+                                                color = textSecondary
+                                            )
+                                            Text(
+                                                text = "${rule.accountName} · ${rule.categoryName}",
+                                                fontSize = 12.sp,
+                                                color = textSecondary
                                             )
                                         }
-
-                                        Text(
-                                            text = "账户: ${rule.accountName} · 分类: ${rule.categoryName} · 生效日: ${rule.startDate}",
-                                            fontSize = 12.sp,
-                                            color = textSecondary
-                                        )
                                     }
                                 }
                             }
@@ -922,6 +408,737 @@ fun PeriodicScreen(
                 }
             }
         }
+    }
+}
+
+// ====== 表单子界面 (添加与编辑通用) ======
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PeriodicFormScreen(
+    selectedTab: Int,
+    editingRule: PeriodicRule?,
+    editingPlan: InstallmentPlan?,
+    books: List<Book>,
+    accounts: List<Account>,
+    isDark: Boolean,
+    onBack: () -> Unit,
+    onSaveRule: (PeriodicRule) -> Unit,
+    onSavePlan: (InstallmentPlan) -> Unit,
+    onDeleteRule: ((PeriodicRule) -> Unit)? = null,
+    onDeletePlan: ((InstallmentPlan) -> Unit)? = null
+) {
+    val context = LocalContext.current
+    val textColor = if (isDark) DarkTextPrimary else LightTextPrimary
+    val textSecondary = if (isDark) DarkTextSecondary else LightTextSecondary
+    val cardBg = if (isDark) DarkSurfaceCard else LightSurfaceCard
+
+    val isEditing = editingRule != null || editingPlan != null
+
+    val initialStartDate = editingRule?.startDate ?: SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    var startDate by remember { mutableStateOf(initialStartDate) }
+
+    val parsedDay = editingPlan?.dayOfMonth
+        ?: editingRule?.frequency?.let { Regex("""\d+""").find(it)?.value?.toIntOrNull() }
+        ?: 10
+    var dayOfMonth by remember { mutableIntStateOf(parsedDay) }
+
+    val initialFreq = if (editingRule != null) {
+        if (editingRule.frequency.contains("每月")) "每月" else editingRule.frequency
+    } else "每月"
+    var frequency by remember { mutableStateOf(initialFreq) }
+
+    val initialEndType = editingRule?.endType ?: if (selectedTab == 0) "按期数还清后自动结束" else "永不结束"
+    var endType by remember { mutableStateOf(initialEndType) }
+
+    val initialExpense = editingRule?.type?.let { it == TransactionType.EXPENSE } ?: true
+    var isPeriodicExpense by remember { mutableStateOf(initialExpense) }
+
+    val initialBookId = editingRule?.bookId ?: editingPlan?.bookId ?: books.firstOrNull { it.isDefault }?.id ?: books.firstOrNull()?.id ?: 1L
+    val initialBookName = books.firstOrNull { it.id == initialBookId }?.name ?: "日常消费账本"
+    var selectedBookId by remember { mutableLongStateOf(initialBookId) }
+    var selectedBookName by remember { mutableStateOf(initialBookName) }
+
+    val initialAccountName = editingRule?.accountName ?: editingPlan?.accountName ?: accounts.firstOrNull()?.name ?: "微信"
+    var selectedAccountName by remember { mutableStateOf(initialAccountName) }
+
+    val initialCat = editingRule?.categoryName ?: if (selectedTab == 0) "分期还款" else "日常支出"
+    var selectedCat by remember { mutableStateOf(initialCat) }
+
+    val initialAmount = editingRule?.let { if (it.amount % 1.0 == 0.0) it.amount.toLong().toString() else it.amount.toString() }
+        ?: editingPlan?.let { if (it.totalAmount % 1.0 == 0.0) it.totalAmount.toLong().toString() else it.totalAmount.toString() }
+        ?: ""
+    var amountText by remember { mutableStateOf(initialAmount) }
+
+    val initialTime = editingRule?.timeOfDay ?: "10:00"
+    var timeOfDay by remember { mutableStateOf(initialTime) }
+
+    val initialRemark = editingRule?.name ?: editingPlan?.name ?: ""
+    var remark by remember { mutableStateOf(initialRemark) }
+
+    val initialPeriods = editingPlan?.totalPeriods?.toString() ?: "12"
+    var periodsCount by remember { mutableStateOf(initialPeriods) }
+
+    // 弹窗状态
+    var showBookPicker by remember { mutableStateOf(false) }
+    var showAccountPicker by remember { mutableStateOf(false) }
+    var showDayOfMonthPicker by remember { mutableStateOf(false) }
+    var showEndTypePicker by remember { mutableStateOf(false) }
+    var showFrequencyPicker by remember { mutableStateOf(false) }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            Row(
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(top = 10.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = textColor)
+                }
+                Text(
+                    text = if (selectedTab == 0) {
+                        if (editingPlan != null) "编辑信用卡 / 花呗分期" else "添加信用卡 / 花呗分期"
+                    } else {
+                        if (editingRule != null) "编辑周期记账" else "添加周期记账"
+                    },
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textColor
+                )
+            }
+        },
+        bottomBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                IconButton(
+                    onClick = {
+                        val parsedAmt = amountText.toDoubleOrNull() ?: 0.0
+                        val parsedP = periodsCount.toIntOrNull() ?: 12
+                        if (parsedAmt <= 0.0) {
+                            Toast.makeText(context, "请先输入金额再预览", Toast.LENGTH_SHORT).show()
+                        } else if (selectedTab == 0) {
+                            val monthly = parsedAmt / parsedP
+                            Toast.makeText(context, "预览：每期应还 ¥ ${String.format(Locale.getDefault(), "%.2f", monthly)}，每月 ${dayOfMonth} 日扣款", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "预览：每期 ¥ $parsedAmt ($frequency)，扣款日 $startDate", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(BlueAccent)
+                ) {
+                    Icon(Icons.Default.Visibility, contentDescription = "预览", tint = Color.White)
+                }
+
+                Button(
+                    onClick = {
+                        val amount = amountText.toDoubleOrNull() ?: 0.0
+                        if (amount <= 0.0) {
+                            Toast.makeText(context, "请输入有效的账单金额", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (selectedTab == 0) {
+                            val totalP = periodsCount.toIntOrNull() ?: 12
+                            val monthly = amount / totalP
+                            if (editingPlan != null) {
+                                onSavePlan(
+                                    editingPlan.copy(
+                                        name = if (remark.isNotBlank()) remark.trim() else "${selectedAccountName}分期",
+                                        totalAmount = amount,
+                                        totalPeriods = totalP,
+                                        monthlyAmount = monthly,
+                                        bookId = selectedBookId,
+                                        accountName = selectedAccountName,
+                                        dayOfMonth = dayOfMonth
+                                    )
+                                )
+                            } else {
+                                onSavePlan(
+                                    InstallmentPlan(
+                                        name = if (remark.isNotBlank()) remark.trim() else "${selectedAccountName}分期",
+                                        totalAmount = amount,
+                                        totalPeriods = totalP,
+                                        currentPeriod = 1,
+                                        monthlyAmount = monthly,
+                                        bookId = selectedBookId,
+                                        accountName = selectedAccountName,
+                                        dayOfMonth = dayOfMonth
+                                    )
+                                )
+                            }
+                        } else {
+                            val freqText = if (frequency == "每月") "每月 ${dayOfMonth} 日" else frequency
+                            if (editingRule != null) {
+                                onSaveRule(
+                                    editingRule.copy(
+                                        name = if (remark.isNotBlank()) remark.trim() else (if (isPeriodicExpense) "固定支出" else "固定收入"),
+                                        type = if (isPeriodicExpense) TransactionType.EXPENSE else TransactionType.INCOME,
+                                        amount = amount,
+                                        bookId = selectedBookId,
+                                        categoryName = selectedCat,
+                                        accountName = selectedAccountName,
+                                        startDate = startDate,
+                                        frequency = freqText,
+                                        endType = endType,
+                                        timeOfDay = timeOfDay
+                                    )
+                                )
+                            } else {
+                                onSaveRule(
+                                    PeriodicRule(
+                                        name = if (remark.isNotBlank()) remark.trim() else (if (isPeriodicExpense) "固定支出" else "固定收入"),
+                                        type = if (isPeriodicExpense) TransactionType.EXPENSE else TransactionType.INCOME,
+                                        amount = amount,
+                                        bookId = selectedBookId,
+                                        categoryName = selectedCat,
+                                        accountName = selectedAccountName,
+                                        startDate = startDate,
+                                        frequency = freqText,
+                                        endType = endType,
+                                        timeOfDay = timeOfDay
+                                    )
+                                )
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BlueAccent),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isEditing) "保存修改" else "保存计划", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    ) { innerPad ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPad)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // 周期记账模式下的收支切换
+            if (selectedTab == 1) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(cardBg)
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isPeriodicExpense) CoralRed else Color.Transparent)
+                                .clickable { isPeriodicExpense = true }
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "支出 (房租/水电等)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isPeriodicExpense) Color.White else textSecondary
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (!isPeriodicExpense) MintGreen else Color.Transparent)
+                                .clickable { isPeriodicExpense = false }
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "收入 (工资/收租等)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (!isPeriodicExpense) Color.White else textSecondary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 金额输入
+            item {
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = { Text(if (selectedTab == 0) "分期总金额 (¥)" else "周期金额 (¥)") },
+                    placeholder = { Text("0.00") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // 分期专属：期数快捷选择与试算卡片
+            if (selectedTab == 0) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(text = "分期总期数", fontSize = 13.sp, color = textSecondary)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("3", "6", "12", "24", "36").forEach { p ->
+                                val isSelected = periodsCount == p
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) BlueAccent else cardBg)
+                                        .clickable { periodsCount = p }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${p}期",
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) Color.White else textColor
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 实时分期还款试算卡片
+                item {
+                    val parsedAmt = amountText.toDoubleOrNull() ?: 0.0
+                    val parsedP = periodsCount.toIntOrNull() ?: 12
+                    if (parsedAmt > 0 && parsedP > 0) {
+                        val monthlyEst = parsedAmt / parsedP
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(BlueAccent.copy(alpha = 0.12f))
+                                .padding(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(text = "每期应还款 (自动试算)", fontSize = 12.sp, color = textSecondary)
+                                    Text(
+                                        text = "¥ ${String.format(Locale.getDefault(), "%.2f", monthlyEst)} / 期",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BlueAccent
+                                    )
+                                }
+                                Text(
+                                    text = "每月 ${dayOfMonth} 日扣款",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = BlueAccent
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 每月扣款日 (账单日) - 信用卡/花呗最核心逻辑！
+            item {
+                FormRow(label = "每月扣款日 (还款日)", value = "每月 ${dayOfMonth} 日", isDark = isDark) {
+                    showDayOfMonthPicker = true
+                }
+            }
+
+            // 开始执行日期
+            item {
+                FormRow(label = if (selectedTab == 0) "首期还款日期" else "开始日期", value = startDate, isDark = isDark) {
+                    val c = Calendar.getInstance()
+                    DatePickerDialog(context, { _, y, m, d ->
+                        startDate = String.format(Locale.getDefault(), "%04d-%02d-%02d", y, m + 1, d)
+                    }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
+                }
+            }
+
+            // 扣款具体时间 (时:分)
+            item {
+                FormRow(label = "扣款时间点", value = timeOfDay, isDark = isDark) {
+                    val parts = timeOfDay.split(":")
+                    val curH = parts.getOrNull(0)?.toIntOrNull() ?: 10
+                    val curM = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                    TimePickerDialog(context, { _, h, m ->
+                        timeOfDay = String.format(Locale.getDefault(), "%02d:%02d", h, m)
+                    }, curH, curM, true).show()
+                }
+            }
+
+            // 重复周期 (仅周期记账模式需要独立选周期)
+            if (selectedTab == 1) {
+                item {
+                    FormRow(label = "重复周期", value = frequency, isDark = isDark) {
+                        showFrequencyPicker = true
+                    }
+                }
+            }
+
+            // 结束方式 (下拉/菜单弹窗)
+            item {
+                FormRow(label = "结束方式", value = endType, isDark = isDark) {
+                    showEndTypePicker = true
+                }
+            }
+
+            // 账本 (下拉选择真实账本)
+            item {
+                FormRow(label = "入账账本", value = selectedBookName, isDark = isDark) {
+                    showBookPicker = true
+                }
+            }
+
+            // 扣款/入账账户 (下拉选择真实账户)
+            item {
+                FormRow(label = if (selectedTab == 0 || isPeriodicExpense) "扣款账户" else "入账账户", value = selectedAccountName, isDark = isDark) {
+                    showAccountPicker = true
+                }
+            }
+
+            // 备注
+            item {
+                OutlinedTextField(
+                    value = remark,
+                    onValueChange = { remark = it },
+                    label = { Text(if (selectedTab == 0) "分期备注 (如：MacBook、花呗手机分期)" else "规则备注 (如：房租、公司工资)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // 编辑模式下的安全删除操作
+            if (isEditing) {
+                item {
+                    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { showDeleteConfirm = true },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = CoralRed),
+                        border = BorderStroke(1.dp, CoralRed.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = CoralRed)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (selectedTab == 0) "删除此分期计划" else "删除此周期规则",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CoralRed
+                        )
+                    }
+
+                    if (showDeleteConfirm) {
+                        AlertDialog(
+                            onDismissRequest = { showDeleteConfirm = false },
+                            title = { Text("确认删除", fontWeight = FontWeight.Bold) },
+                            text = { Text("确定要删除此条${if (selectedTab == 0) "分期计划" else "周期规则"}吗？删除后不可恢复。") },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        showDeleteConfirm = false
+                                        if (selectedTab == 0 && editingPlan != null) {
+                                            onDeletePlan?.invoke(editingPlan)
+                                        } else if (selectedTab == 1 && editingRule != null) {
+                                            onDeleteRule?.invoke(editingRule)
+                                        }
+                                    }
+                                ) {
+                                    Text("确认删除", color = CoralRed, fontWeight = FontWeight.Bold)
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showDeleteConfirm = false }) {
+                                    Text("取消")
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+        }
+    }
+
+    // ====== 账本选择弹窗 ======
+    if (showBookPicker) {
+        AlertDialog(
+            onDismissRequest = { showBookPicker = false },
+            title = { Text(text = "选择入账账本", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    books.forEach { b ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    selectedBookId = b.id
+                                    selectedBookName = b.name
+                                    showBookPicker = false
+                                }
+                                .padding(vertical = 12.dp, horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Book, contentDescription = null, tint = BlueAccent, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(text = b.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = textColor)
+                                    if (b.isDefault) {
+                                        Text(text = "默认账本", fontSize = 11.sp, color = textSecondary)
+                                    }
+                                }
+                            }
+                            if (b.id == selectedBookId) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = BlueAccent)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {}
+        )
+    }
+
+    // ====== 扣款账户选择弹窗 ======
+    if (showAccountPicker) {
+        AlertDialog(
+            onDismissRequest = { showAccountPicker = false },
+            title = { Text(text = if (selectedTab == 0 || isPeriodicExpense) "选择扣款账户" else "选择入账账户", fontWeight = FontWeight.Bold) },
+            text = {
+                LazyColumn(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(accounts) { acc ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    selectedAccountName = acc.name
+                                    showAccountPicker = false
+                                }
+                                .padding(vertical = 12.dp, horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (acc.name.contains("微信")) Icons.Default.ChatBubble else if (acc.name.contains("支付宝")) Icons.Default.Payment else Icons.Default.CreditCard,
+                                    contentDescription = null,
+                                    tint = if (acc.name.contains("微信")) MintGreen else if (acc.name.contains("支付宝")) BlueAccent else CoralRed,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(text = acc.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = textColor)
+                                    Text(text = "当前余额: ¥ ${String.format(Locale.getDefault(), "%.2f", acc.balance)}", fontSize = 11.sp, color = textSecondary)
+                                }
+                            }
+                            if (acc.name == selectedAccountName) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = BlueAccent)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {}
+        )
+    }
+
+    // ====== 每月扣款日 (1 至 31日) 选择弹窗 ======
+    if (showDayOfMonthPicker) {
+        AlertDialog(
+            onDismissRequest = { showDayOfMonthPicker = false },
+            title = { Text(text = "选择每月扣款日 / 账单日", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(text = "常用日期快捷选：", fontSize = 13.sp, color = textSecondary)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        listOf(5, 8, 9, 10, 15, 20, 25).forEach { d ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (dayOfMonth == d) BlueAccent else (if (isDark) DarkSurface else LightBorder))
+                                    .clickable {
+                                        dayOfMonth = d
+                                        showDayOfMonthPicker = false
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "${d}日",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (dayOfMonth == d) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (dayOfMonth == d) Color.White else textColor
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = "全部 1 至 31 日：", fontSize = 13.sp, color = textSecondary)
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(7),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.height(200.dp)
+                    ) {
+                        items(31) { idx ->
+                            val day = idx + 1
+                            Box(
+                                modifier = Modifier
+                                    .aspectRatio(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (dayOfMonth == day) BlueAccent else (if (isDark) DarkSurface else LightBorder))
+                                    .clickable {
+                                        dayOfMonth = day
+                                        showDayOfMonthPicker = false
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "$day",
+                                    fontSize = 13.sp,
+                                    fontWeight = if (dayOfMonth == day) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (dayOfMonth == day) Color.White else textColor
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {}
+        )
+    }
+
+    // ====== 结束方式选择弹窗 ======
+    if (showEndTypePicker) {
+        val endOptions = if (selectedTab == 0) {
+            listOf(
+                "按期数还清后自动结束" to "还满设定的总期数后自动完结并停止扣款",
+                "截至指定日期结束" to "到达指定的截止日期后自动停止",
+                "永不结束 / 长期循环" to "持续每月自动入账，直到手动停止"
+            )
+        } else {
+            listOf(
+                "永不结束" to "长期按规律自动记账，适用于房租、工资等",
+                "执行固定次数后结束" to "按指定次数执行满后结束 (默认12次)",
+                "截至指定日期结束" to "到达指定截止日期后停止入账"
+            )
+        }
+
+        AlertDialog(
+            onDismissRequest = { showEndTypePicker = false },
+            title = { Text(text = "选择结束方式", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    endOptions.forEach { (opt, desc) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    if (opt == "截至指定日期结束") {
+                                        val c = Calendar.getInstance()
+                                        DatePickerDialog(context, { _, y, m, d ->
+                                            endType = String.format(Locale.getDefault(), "截至 %04d-%02d-%02d 结束", y, m + 1, d)
+                                            showEndTypePicker = false
+                                        }, c.get(Calendar.YEAR) + 1, c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
+                                    } else {
+                                        endType = opt
+                                        showEndTypePicker = false
+                                    }
+                                }
+                                .padding(vertical = 10.dp, horizontal = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = opt, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = textColor)
+                                Text(text = desc, fontSize = 12.sp, color = textSecondary)
+                            }
+                            if (endType.startsWith(opt.take(4))) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = BlueAccent)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {}
+        )
+    }
+
+    // ====== 重复周期选择弹窗 (仅周期记账) ======
+    if (showFrequencyPicker) {
+        val freqOptions = listOf(
+            "每月" to "每月固定扣款日自动记账 (最常用)",
+            "每周" to "每周固定星期几自动记账",
+            "每工作日" to "周一至周五自动记账",
+            "每天" to "每天固定时间自动记账",
+            "每年" to "每年固定月份与日期自动记账"
+        )
+
+        AlertDialog(
+            onDismissRequest = { showFrequencyPicker = false },
+            title = { Text(text = "选择重复周期", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    freqOptions.forEach { (f, desc) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    frequency = f
+                                    showFrequencyPicker = false
+                                }
+                                .padding(vertical = 10.dp, horizontal = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = f, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = textColor)
+                                Text(text = desc, fontSize = 12.sp, color = textSecondary)
+                            }
+                            if (frequency == f) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = BlueAccent)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {}
+        )
     }
 }
 
