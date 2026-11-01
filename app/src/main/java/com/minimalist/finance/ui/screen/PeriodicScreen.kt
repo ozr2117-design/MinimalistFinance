@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.minimalist.finance.data.model.*
@@ -744,10 +745,22 @@ fun PeriodicScreen(
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(end = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
                                                 Icon(Icons.Default.CreditCard, contentDescription = null, tint = CoralRed, modifier = Modifier.size(20.dp))
                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                Text(text = plan.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                                Text(
+                                                    text = plan.name,
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = textColor,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
                                             }
                                             IconButton(onClick = { viewModel.deleteInstallmentPlan(plan) }, modifier = Modifier.size(28.dp)) {
                                                 Icon(Icons.Default.DeleteOutline, contentDescription = "删除", tint = textSecondary, modifier = Modifier.size(20.dp))
@@ -839,7 +852,12 @@ fun PeriodicScreen(
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(end = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
                                                 Box(
                                                     modifier = Modifier
                                                         .clip(RoundedCornerShape(4.dp))
@@ -854,7 +872,14 @@ fun PeriodicScreen(
                                                     )
                                                 }
                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                Text(text = rule.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                                Text(
+                                                    text = rule.name,
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = textColor,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
                                             }
 
                                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -862,10 +887,9 @@ fun PeriodicScreen(
                                                     checked = rule.isEnabled,
                                                     onCheckedChange = { checked ->
                                                         viewModel.updatePeriodicRule(rule.copy(isEnabled = checked))
-                                                    },
-                                                    modifier = Modifier.size(36.dp)
+                                                    }
                                                 )
-                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
                                                 IconButton(onClick = { viewModel.deletePeriodicRule(rule) }, modifier = Modifier.size(28.dp)) {
                                                     Icon(Icons.Default.DeleteOutline, contentDescription = "删除", tint = textSecondary, modifier = Modifier.size(20.dp))
                                                 }

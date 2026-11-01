@@ -1,8 +1,8 @@
 {
-  "versionCode": 44,
-  "versionName": "1.4.3",
-  "releaseDate": "2026-10-25",
-  "changelog": "1. 全面统一应用内品牌视觉：将侧边抽屉与「关于」界面的传统旧红印图标替换为统一色系的「黑曜石天平」高质感应用图标\n2. 高清视网膜适配：内置超清应用徽标资源，呈现细腻现代的极简黑金美学\n3. 持续巩固微信、支付宝与云闪付官方账单 CSV 智能解析与物理级单号去重导入稳定性",
-  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.3/shubu-v1.4.3.apk",
-  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.3/shubu-v1.4.3.apk"
+  "versionCode": 45,
+  "versionName": "1.4.4",
+  "releaseDate": "2026-11-01",
+  "changelog": "1. 优化周期与分期管理界面排版：修复长标题文本被右侧开关遮挡压住的问题，引入自适应权重与单行省略打点\n2. 优化操作布局：规范状态开关与删除按钮间距，保障小屏幕及长文本下的交互体验",
+  "downloadUrl": "https://ghproxy.net/https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.4/shubu-v1.4.4.apk",
+  "backupDownloadUrl": "https://github.com/ozr2117-design/MinimalistFinance/releases/download/v1.4.4/shubu-v1.4.4.apk"
 }
